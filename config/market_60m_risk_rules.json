@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "rules_version": "market_60m_risk_v0.1",
+  "instruments": {
+    "index.sse_composite": {"name": "上证指数", "group": "BROAD_MARKET"},
+    "index.sse50": {"name": "上证50", "group": "LARGE_CAP"},
+    "index.csi300": {"name": "沪深300", "group": "LARGE_CAP"},
+    "index.csi500": {"name": "中证500", "group": "MID_SMALL"},
+    "index.csi_free_float": {"name": "中证流通", "group": "BROAD_MARKET"},
+    "index.chinext": {"name": "创业板指", "group": "GROWTH"},
+    "index.csi1000": {"name": "中证1000", "group": "MID_SMALL"},
+    "index.star50": {"name": "科创50", "group": "GROWTH"}
+  },
+  "groups": {
+    "LARGE_CAP": ["index.sse50", "index.csi300"],
+    "BROAD_MARKET": ["index.sse_composite", "index.csi_free_float"],
+    "MID_SMALL": ["index.csi500", "index.csi1000"],
+    "GROWTH": ["index.chinext", "index.star50"]
+  },
+  "scoring_fields": ["close"],
+  "ignored_fields": ["open", "high", "low", "volume", "turnover"],
+  "recent_close_window_periods": 8,
+  "breadth_points": [
+    {"min": 0, "max": 2, "points": 0},
+    {"min": 3, "max": 4, "points": 1},
+    {"min": 5, "max": 6, "points": 2},
+    {"min": 7, "max": 8, "points": 3}
+  ],
+  "persistent_weakness_points": [
+    {"min": 0, "max": 2, "points": 0},
+    {"min": 3, "max": 4, "points": 1},
+    {"min": 5, "max": 8, "points": 2}
+  ],
+  "downside_shock": {
+    "percentile": 0.95,
+    "minimum_complete_trading_days": 60,
+    "points": [
+      {"min": 0, "max": 0, "points": 0},
+      {"min": 1, "max": 1, "points": 1},
+      {"min": 2, "max": 8, "points": 2}
+    ]
+  },
+  "weighted_support_distortion": {
+    "large_cap_all_advance": true,
+    "other_decliners_min": 4,
+    "points": 1
+  },
+  "small_cap_stress": {
+    "mid_small_all_decline": true,
+    "growth_decliners_min": 1
+  },
+  "broad_selloff_decliners_min": 6,
+  "strong_broad_weakness": {"decliners_min": 7, "persistent_weak_min": 5},
+  "broad_repair": {"repair_count_min": 5, "score_offset": 1},
+  "risk_lights": [
+    {"min": 0, "max": 1, "name": "GREEN", "symbol": "🟢"},
+    {"min": 2, "max": 3, "name": "YELLOW", "symbol": "🟡"},
+    {"min": 4, "max": 5, "name": "ORANGE", "symbol": "🟠"},
+    {"min": 6, "max": 8, "name": "RED", "symbol": "🔴"}
+  ],
+  "confidence": {"high_valid_count": 8, "medium_valid_count_min": 6}
+}

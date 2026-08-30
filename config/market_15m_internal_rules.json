@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "rules_version": "market_15m_internal_v0.1",
+  "source_60m_rules_version": "market_60m_risk_v0.1",
+  "completed_15m_bars": 4,
+  "trusted_close_quality": ["TRUSTED", "TRUSTED_WITH_TRANSFORMATION"],
+  "classification_precedence": [
+    "LATE_REPAIR",
+    "FAILED_REPAIR",
+    "LATE_WEAKENING",
+    "HEALTHY_UP",
+    "HEALTHY_DOWN",
+    "MIXED"
+  ],
+  "healthy_direction_min": 3,
+  "market_broadening_min": 5,
+  "minimum_valid_indexes": 6,
+  "complete_classifications": [
+    "HEALTHY_UP",
+    "HEALTHY_DOWN",
+    "LATE_REPAIR",
+    "FAILED_REPAIR",
+    "LATE_WEAKENING",
+    "MIXED"
+  ],
+  "early_classifications": [
+    "EARLY_STRENGTH",
+    "EARLY_WEAKNESS",
+    "EARLY_MIXED"
+  ]
+}

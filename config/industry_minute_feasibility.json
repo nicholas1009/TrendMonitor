@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "rules_version": "industry_minute_feasibility_v0.1",
+  "source_stock_rules_version": "stock_60m_risk_v0.1",
+  "source_industry_context_rules_version": "stock_industry_context_v0.1",
+  "scoring_effect": "NONE",
+  "synthetic_benchmark_allowed": false,
+  "canonical_benchmarks": {
+    "stock.hengtong_optic": {
+      "stock_symbol": "600487.SH",
+      "stock_name": "亨通光电",
+      "provider": "hithink",
+      "taxonomy": "THS",
+      "provider_symbol": "881129.TI",
+      "name": "通信设备",
+      "mapping_type": "EXACT",
+      "confidence": "HIGH"
+    },
+    "stock.wus_printed_circuit": {
+      "stock_symbol": "002463.SZ",
+      "stock_name": "沪电股份",
+      "provider": "hithink",
+      "taxonomy": "THS",
+      "provider_symbol": "884092.TI",
+      "name": "印制电路板",
+      "mapping_type": "EXACT",
+      "confidence": "HIGH"
+    }
+  },
+  "minute_proxy_candidates": {
+    "stock.hengtong_optic": {
+      "provider": "tushare",
+      "taxonomy": "SW2021",
+      "provider_symbol": "801102.SI",
+      "name": "通信设备",
+      "hierarchy": "L2",
+      "mapping_type": "CANDIDATE_PROXY",
+      "confidence": "LOW_PENDING_VALIDATION"
+    },
+    "stock.wus_printed_circuit": {
+      "provider": "tushare",
+      "taxonomy": "SW2021",
+      "provider_symbol": "850822.SI",
+      "name": "印制电路板",
+      "hierarchy": "L3",
+      "mapping_type": "CANDIDATE_PROXY",
+      "confidence": "LOW_PENDING_VALIDATION"
+    }
+  },
+  "tushare": {
+    "credential_keys": ["TUSHARE_TOKEN", "TUSHARE_API_TOKEN"],
+    "membership_endpoint": "index_member_all",
+    "daily_endpoint": "sw_daily",
+    "historical_minute_endpoint": "sw_mins",
+    "realtime_endpoint": "rt_sw_k",
+    "historical_frequencies": ["15min", "60min"],
+    "realtime_semantics": "REALTIME_INDEX_SNAPSHOT",
+    "historical_membership_fields": ["in_date", "out_date", "is_new"],
+    "boundary_times": ["10:30", "11:30", "14:00", "15:00"],
+    "required_permissions": {
+      "membership": "2000_POINTS",
+      "daily": "5000_POINTS",
+      "historical_minute": "SW_MINUTE_SEPARATE_PERMISSION",
+      "realtime": "SW_REALTIME_SEPARATE_PERMISSION"
+    }
+  },
+  "provider_scorecard": [
+    {
+      "provider": "Hithink",
+      "taxonomy": "THS",
+      "identity": "EXACT",
+      "historical_15m": "UNSUPPORTED",
+      "historical_60m": "UNSUPPORTED",
+      "live": "QUOTE_SNAPSHOT_ONLY",
+      "historical_members": "NOT_DOCUMENTED",
+      "automation": "YES_REST",
+      "cost": "EXISTING_ACCESS"
+    },
+    {
+      "provider": "Tushare",
+      "taxonomy": "THS + SW2021",
+      "identity": "THS_EXACT_DAILY_ONLY; SW_CANDIDATE_PROXY",
+      "historical_15m": "SW_DOCUMENTED_PERMISSIONED",
+      "historical_60m": "SW_DOCUMENTED_PERMISSIONED",
+      "live": "SW_REALTIME_INDEX_SNAPSHOT",
+      "historical_members": "SW_DOCUMENTED_IN_OUT_DATES",
+      "automation": "YES_SDK_REST",
+      "cost": "POINTS_PLUS_SEPARATE_MINUTE_PERMISSIONS"
+    },
+    {
+      "provider": "JoinQuant",
+      "taxonomy": "PROVIDER_INDUSTRY_CLASSIFICATIONS",
+      "identity": "NOT_EXACT",
+      "historical_15m": "INDUSTRY_INDEX_NOT_CONFIRMED",
+      "historical_60m": "INDUSTRY_INDEX_NOT_CONFIRMED",
+      "live": "INDUSTRY_INDEX_NOT_CONFIRMED",
+      "historical_members": "DATE_PARAMETER_DOCUMENTED",
+      "automation": "YES_WITH_ACCOUNT",
+      "cost": "ACCOUNT_OR_QUOTE_REQUIRED"
+    },
+    {
+      "provider": "RQData",
+      "taxonomy": "NBS_AND_MSCI",
+      "identity": "NOT_EXACT",
+      "historical_15m": "TARGET_INDUSTRY_INDEX_NOT_DOCUMENTED",
+      "historical_60m": "TARGET_INDUSTRY_INDEX_NOT_DOCUMENTED",
+      "live": "TARGET_INDUSTRY_INDEX_NOT_DOCUMENTED",
+      "historical_members": "OWN_TAXONOMY_ONLY",
+      "automation": "YES_WITH_ACCOUNT",
+      "cost": "QUOTE_REQUIRED"
+    },
+    {
+      "provider": "BigQuant",
+      "taxonomy": "SW2021_AND_PLATFORM_DERIVED",
+      "identity": "NOT_EXACT",
+      "historical_15m": "TARGET_L2_L3_NOT_CONFIRMED",
+      "historical_60m": "TARGET_L2_L3_NOT_CONFIRMED",
+      "live": "NOT_CONFIRMED",
+      "historical_members": "SW2021_FIELDS_DOCUMENTED",
+      "automation": "YES_WITH_ACCOUNT",
+      "cost": "TIER_OR_QUOTE_REQUIRED"
+    }
+  ],
+  "official_sources": {
+    "tushare_ths_index": "https://tushare.pro/document/2?doc_id=259",
+    "tushare_ths_daily": "https://tushare.pro/document/2?doc_id=260",
+    "tushare_ths_member": "https://tushare.pro/document/2?doc_id=261",
+    "tushare_sw_members": "https://tushare.pro/document/2?doc_id=335",
+    "tushare_sw_daily": "https://tushare.pro/document/2?doc_id=327",
+    "tushare_sw_minutes": "https://tushare.pro/document/2?doc_id=469",
+    "tushare_sw_realtime": "https://tushare.pro/document/2?doc_id=417",
+    "tushare_permissions": "https://tushare.pro/document/2?doc_id=290",
+    "joinquant_industry": "https://www.joinquant.com/help/data/stock?f=home&m=footer",
+    "joinquant_bars": "https://www.joinquant.com/help/api/doc?id=9875&name=JQDatadoc",
+    "rqdata_industry": "https://www.ricequant.com/doc/rqdata/python/stock-mod.html",
+    "rqdata_price": "https://www.ricequant.com/doc/rqdata/python/generic-api",
+    "bigquant_sw": "https://bigquant.com/data/datasources/cn_stock_factors_industry"
+  }
+}

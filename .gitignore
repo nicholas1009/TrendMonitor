@@ -1,0 +1,44 @@
+# Credentials and local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+
+# Python
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Provider data, snapshots, replay, reports, runtime state, and logs
+data/
+logs/
+
+# macOS and IDE
+.DS_Store
+.idea/
+.vscode/
+
+# Runtime and local databases
+*.log
+*.lock
+!uv.lock
+*.pid
+*.tmp
+*.bak
+*.sqlite
+*.sqlite3
+*.db

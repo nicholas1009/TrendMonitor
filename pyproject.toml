@@ -1,0 +1,11 @@
+[project]
+name = "trend-monitor-local"
+version = "0.1.0"
+description = "Local, traceable market-data validation infrastructure."
+requires-python = ">=3.11"
+dependencies = [
+    "longbridge>=4.5.0",
+]
+
+[tool.uv]
+package = false

@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "formal_daily": {
+    "source_requirement": "DIRECT",
+    "minute_derived_daily_allowed": false,
+    "purpose": "formal_trend_and_trade_decision"
+  },
+  "layers": {
+    "60m": "risk_warning_and_detail_confirmation",
+    "15m": "internal_structure_support_for_60m_only"
+  },
+  "field_profiles": {
+    "stock": {
+      "15m": {"open": "APPROXIMATE", "high": "APPROXIMATE", "low": "APPROXIMATE", "close": "TRUSTED", "volume": "APPROXIMATE", "turnover": "APPROXIMATE"},
+      "60m": {"open": "APPROXIMATE", "high": "APPROXIMATE", "low": "APPROXIMATE", "close": "TRUSTED", "volume": "APPROXIMATE", "turnover": "APPROXIMATE"}
+    },
+    "index": {
+      "15m": {"open": "APPROXIMATE", "high": "APPROXIMATE", "low": "APPROXIMATE", "close": "TRUSTED", "volume": "BLOCKED", "turnover": "ADVISORY_ONLY"},
+      "60m": {"open": "APPROXIMATE", "high": "APPROXIMATE", "low": "APPROXIMATE", "close": "TRUSTED", "volume": "BLOCKED", "turnover": "ADVISORY_ONLY"}
+    }
+  },
+  "features": [
+    {"feature": "current_period_close", "layers": ["15m", "60m"], "asset_types": ["stock", "index"], "fields": ["close"], "usage": "EXACT_TRIGGER"},
+    {"feature": "previous_period_close", "layers": ["15m", "60m"], "asset_types": ["stock", "index"], "fields": ["close"], "usage": "EXACT_TRIGGER"},
+    {"feature": "close_change", "layers": ["15m", "60m"], "asset_types": ["stock", "index"], "fields": ["close"], "usage": "EXACT_TRIGGER"},
+    {"feature": "close_change_pct", "layers": ["15m", "60m"], "asset_types": ["stock", "index"], "fields": ["close"], "usage": "EXACT_TRIGGER"},
+    {"feature": "consecutive_close_direction", "layers": ["15m", "60m"], "asset_types": ["stock", "index"], "fields": ["close"], "usage": "EXACT_TRIGGER"},
+    {"feature": "period_close_change", "layers": ["15m", "60m"], "asset_types": ["stock", "index"], "fields": ["close"], "usage": "EXACT_TRIGGER"},
+    {"feature": "consecutive_close_weakness", "layers": ["15m", "60m"], "asset_types": ["stock", "index"], "fields": ["close"], "usage": "EXACT_TRIGGER"},
+    {"feature": "close_repair", "layers": ["15m", "60m"], "asset_types": ["stock", "index"], "fields": ["close"], "usage": "EXACT_TRIGGER"},
+    {"feature": "relative_close_strength", "layers": ["15m", "60m"], "asset_types": ["stock", "index"], "fields": ["close"], "usage": "EXACT_TRIGGER"},
+    {"feature": "close_based_macd_auxiliary", "layers": ["15m", "60m"], "asset_types": ["stock", "index"], "fields": ["close"], "usage": "EXACT_TRIGGER"},
+    {"feature": "precise_high_low_break", "layers": ["15m", "60m"], "asset_types": ["stock", "index"], "fields": ["high", "low"], "usage": "EXACT_TRIGGER"},
+    {"feature": "intraday_high_low_structure", "layers": ["15m", "60m"], "asset_types": ["stock", "index"], "fields": ["high", "low"], "usage": "EXACT_TRIGGER"},
+    {"feature": "high_low_range_description", "layers": ["15m", "60m"], "asset_types": ["stock", "index"], "fields": ["high", "low"], "usage": "ADVISORY"},
+    {"feature": "stock_volume_context", "layers": ["15m", "60m"], "asset_types": ["stock"], "fields": ["volume"], "usage": "ADVISORY"},
+    {"feature": "index_volume_signal", "layers": ["15m", "60m"], "asset_types": ["index"], "fields": ["volume"], "usage": "ADVISORY"},
+    {"feature": "turnover_context", "layers": ["15m", "60m"], "asset_types": ["stock", "index"], "fields": ["turnover"], "usage": "ADVISORY"}
+  ],
+  "runtime_overrides": [
+    {"instrument_id": "stock.wus_printed_circuit", "date": "2026-08-06", "fields": {"volume": "BLOCKED", "turnover": "BLOCKED"}, "reason": "closing_bucket_daily_reconciliation_anomaly"},
+    {"instrument_id": "index.csi500", "date": "2026-08-07", "fields": {"volume": "BLOCKED"}, "reason": "minute_daily_volume_near_double"},
+    {"instrument_id": "index.star50", "date": "2026-08-21", "fields": {"volume": "BLOCKED", "turnover": "BLOCKED"}, "reason": "minute_daily_volume_turnover_anomaly"}
+  ]
+}

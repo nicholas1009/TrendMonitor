@@ -1,0 +1,54 @@
+{
+  "rules_version": "stock_industry_context_v0.1",
+  "source_stock_60m_rules_version": "stock_60m_risk_v0.1",
+  "source_stock_15m_rules_version": "stock_15m_internal_v0.1",
+  "source_market_60m_rules_version": "market_60m_risk_v0.1",
+  "source_market_15m_rules_version": "market_15m_internal_v0.1",
+  "scoring_effect": "NONE",
+  "formal_fields": ["close"],
+  "ignored_for_flags": ["open", "high", "low", "volume", "turnover"],
+  "relative_weakness": {
+    "minimum_complete_trading_days": 60,
+    "percentile": 0.10
+  },
+  "benchmarks": {
+    "stock.hengtong_optic": {
+      "stock_symbol": "600487",
+      "stock_name": "亨通光电",
+      "industry_id": "sector.communication_equipment",
+      "industry_name": "通信设备",
+      "taxonomy": "HITHINK_INDUSTRY_CATALOG_TAG_INDUSTRY",
+      "provider": "hithink",
+      "provider_symbol": "881129.TI",
+      "mapping_type": "EXACT",
+      "confidence": "HIGH",
+      "constituent_verified": true,
+      "quote_capability": "DIRECT",
+      "daily_capability": "DIRECT",
+      "minute_15m_capability": "UNSUPPORTED",
+      "minute_60m_capability": "UNSUPPORTED",
+      "unavailable_reason": "NO_DIRECT_MINUTE_BENCHMARK",
+      "longbridge_mapping_type": "UNMAPPED",
+      "longbridge_confidence": "LOW"
+    },
+    "stock.wus_printed_circuit": {
+      "stock_symbol": "002463",
+      "stock_name": "沪电股份",
+      "industry_id": "sector.printed_circuit_board",
+      "industry_name": "印制电路板",
+      "taxonomy": "HITHINK_INDUSTRY_CATALOG_TAG_INDUSTRY",
+      "provider": "hithink",
+      "provider_symbol": "884092.TI",
+      "mapping_type": "EXACT",
+      "confidence": "HIGH",
+      "constituent_verified": true,
+      "quote_capability": "DIRECT",
+      "daily_capability": "DIRECT",
+      "minute_15m_capability": "UNSUPPORTED",
+      "minute_60m_capability": "UNSUPPORTED",
+      "unavailable_reason": "NO_DIRECT_MINUTE_BENCHMARK",
+      "longbridge_mapping_type": "UNMAPPED",
+      "longbridge_confidence": "LOW"
+    }
+  }
+}

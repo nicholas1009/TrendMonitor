@@ -1,0 +1,6 @@
+{
+  "minimum_common_days": 20,
+  "price_relative_tolerance": null,
+  "mode": "REVIEW_REQUIRED",
+  "rationale": "TASK_003 has authenticated dual-source samples, but no production conflict threshold has been approved. Non-zero differences remain REVIEW_REQUIRED; the report preserves exact magnitudes for review."
+}

@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "runtime_rules_version": "intraday_runtime_v0.1",
+  "business_timezone": "Asia/Shanghai",
+  "periods": [
+    {"start": "09:30", "end": "10:30"},
+    {"start": "10:30", "end": "11:30"},
+    {"start": "13:00", "end": "14:00"},
+    {"start": "14:00", "end": "15:00"}
+  ],
+  "buffer_minutes": 3,
+  "live_grace_minutes": 10,
+  "launchd_poll_seconds": 60,
+  "lock_stale_seconds": 7200,
+  "retry": {
+    "max_attempts": 3,
+    "backoff_seconds": [2, 5],
+    "retryable_categories": ["NETWORK_ERROR", "TIMEOUT", "TEMPORARY_PROVIDER_ERROR", "RATE_LIMIT"]
+  },
+  "pipeline_stages": [
+    {"name": "MARKET_DATA_REFRESH", "script": "scripts/verify_market_index_coverage.py"},
+    {"name": "RISK_INPUT_ASSEMBLY", "script": "scripts/verify_risk_input.py"},
+    {"name": "MARKET_60M_RISK", "script": "scripts/verify_market_60m_risk.py"},
+    {"name": "MARKET_15M_INTERNAL", "script": "scripts/verify_market_15m_internal.py"},
+    {"name": "STOCK_60M_15M", "script": "scripts/verify_stock_intraday_risk.py"}
+  ],
+  "stage_timeout_seconds": 900,
+  "industry_context": "DEFERRED",
+  "frozen_rule_hashes": {
+    "config/market_60m_risk_rules.json": "0c001733e3986e73bbbe484e40cb483e7705cd2233959a5796146002e89fce82",
+    "config/market_15m_internal_rules.json": "1ffd30195c6541b42dd92f9133cd5be422f5c4b38ec3bcd92a690fa9a4619d0d",
+    "config/stock_intraday_risk_rules.json": "7fd2ec0b7670ce225ffe6df038967fcf2130bc46e7f517a8d2f84ad47097dd50",
+    "config/risk_feature_contract.json": "0871e472babc57c1dc7085710933cbd2dfbf09b06d5308cebff1d1061c2f8528"
+  },
+  "secret_keys": [
+    "LONGBRIDGE_APP_KEY",
+    "LONGBRIDGE_APP_SECRET",
+    "LONGBRIDGE_ACCESS_TOKEN",
+    "HITHINK_FINANCE_API_KEY",
+    "HITHINK_API_KEY"
+  ]
+}
