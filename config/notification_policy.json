@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "rules_version": "notification_policy_v0.1",
+  "group": "TrendMonitor",
+  "retry": {
+    "max_attempts": 3,
+    "backoff_seconds": [2, 5],
+    "retryable_categories": ["NETWORK_ERROR", "TIMEOUT", "HTTP_5XX"]
+  },
+  "catch_up": {
+    "risk_notifications": false,
+    "error_notifications": true
+  }
+}

@@ -187,6 +187,15 @@ class RuntimeSnapshotReader:
             },
         }
 
+    def load_previous_period(self, period_end: str) -> dict[str, Any] | None:
+        market_report = self._load("data/reports/market_60m_replay_latest.json")
+        candidates = sorted(
+            str(item["last_completed_bar_end"])
+            for item in market_report.get("results", [])
+            if item.get("last_completed_bar_end") and str(item["last_completed_bar_end"]) < period_end
+        )
+        return self.load_period(candidates[-1]) if candidates else None
+
 
 def build_combined_result(source: dict[str, Any], *, scheduled_period: Any, generated_at: datetime) -> dict[str, Any]:
     market = source["market"]

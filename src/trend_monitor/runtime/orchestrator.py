@@ -31,6 +31,7 @@ class RuntimeRunner:
         clock: Any = time.monotonic,
         lock_path: str | Path | None = None,
         invocation_metadata: dict[str, Any] | None = None,
+        notifier: Any | None = None,
     ):
         self.root = Path(project_root).resolve()
         self.config = config
@@ -42,6 +43,56 @@ class RuntimeRunner:
         self.clock = clock
         self.lock_path = Path(lock_path).resolve() if lock_path else self.root / "data" / "runtime" / "runner.lock"
         self.invocation_metadata = dict(invocation_metadata or {"trigger_source": "MANUAL"})
+        self.notifier = notifier
+
+    def _notify_failure(self, record: dict[str, Any], *, dry_run: bool) -> dict[str, Any]:
+        if self.notifier is None:
+            return {"status": "SKIPPED_DISABLED", "event_count": 0}
+        try:
+            return self.notifier.process_runtime_failure(record, dry_run=dry_run)
+        except Exception:
+            self.logger.error("stage=NOTIFICATION status=FAILED category=NOTIFICATION_INTERNAL_ERROR")
+            return {
+                "status": "FAILED",
+                "event_count": 0,
+                "error_category": "NOTIFICATION_INTERNAL_ERROR",
+            }
+
+    def _notify_combined(
+        self,
+        *,
+        source: dict[str, Any],
+        combined: dict[str, Any],
+        source_result_id: str,
+        dry_run: bool,
+    ) -> dict[str, Any]:
+        if self.notifier is None:
+            return {"status": "SKIPPED_DISABLED", "event_count": 0}
+        previous = None
+        load_previous = getattr(self.reader, "load_previous_period", None)
+        if callable(load_previous):
+            try:
+                previous = load_previous(str(combined["period_end"]))
+            except Exception:
+                self.logger.warning(
+                    "stage=NOTIFICATION_PREVIOUS_STATE status=UNAVAILABLE period_end=%s",
+                    combined.get("period_end"),
+                )
+        try:
+            return self.notifier.process_combined(
+                source,
+                previous,
+                combined,
+                source_result_id=source_result_id,
+                dry_run=dry_run,
+            )
+        except Exception:
+            self.logger.error("stage=NOTIFICATION status=FAILED category=NOTIFICATION_INTERNAL_ERROR")
+            return {
+                "status": "FAILED",
+                "event_count": 0,
+                "error_category": "NOTIFICATION_INTERNAL_ERROR",
+            }
 
     def _record(
         self,
@@ -127,7 +178,14 @@ class RuntimeRunner:
             "network_used": False,
         }
 
-    def run(self, *, as_of: datetime, no_network: bool = False, force: bool = False) -> dict[str, Any]:
+    def run(
+        self,
+        *,
+        as_of: datetime,
+        no_network: bool = False,
+        force: bool = False,
+        notification_dry_run: bool = False,
+    ) -> dict[str, Any]:
         if as_of.tzinfo is None:
             raise ValueError("as_of must be timezone-aware")
         as_of = as_of.astimezone(self.config.timezone)
@@ -137,7 +195,7 @@ class RuntimeRunner:
         env = audit_dotenv(self.root / ".env", self.config.raw["secret_keys"])
         if env["status"] != "PASS":
             error = {"stage": "SECURITY_GATE", "error_category": env["reason"], "retry_count": 0, "recoverable": False}
-            return self._record(
+            record = self._record(
                 run_id=invocation,
                 started=started,
                 completed=datetime.now(self.config.timezone),
@@ -145,12 +203,18 @@ class RuntimeRunner:
                 status="FAILED",
                 error=error,
             )
+            record["notification"] = (
+                {"status": "SKIPPED_POLICY", "event_count": 0, "reason": "SECURITY_GATE"}
+                if env["reason"] == "ENV_PERMISSION_MUST_BE_0600"
+                else self._notify_failure(record, dry_run=notification_dry_run)
+            )
+            return record
         try:
             trading, calendar_source = self.calendar.is_trading_day(
                 as_of.date(), allow_network=not no_network, observed_at=as_of
             )
         except Exception as exc:
-            return self._record(
+            record = self._record(
                 run_id=invocation,
                 started=started,
                 completed=datetime.now(self.config.timezone),
@@ -158,6 +222,10 @@ class RuntimeRunner:
                 status="FAILED",
                 error={"stage": "TRADING_DAY_GATE", "error_category": "CALENDAR_UNAVAILABLE", "retry_count": 0, "recoverable": True, "message": str(exc)},
             )
+            record["notification"] = self._notify_failure(
+                record, dry_run=notification_dry_run
+            )
+            return record
         if not trading:
             skip_key = f"NON_TRADING|{as_of.date().isoformat()}"
             if self.store.skipped_already_recorded(skip_key):
@@ -236,8 +304,7 @@ class RuntimeRunner:
                     machine, human, digest = self.store.save_report(
                         combined, render_combined_report(combined), idempotency_key=key
                     )
-                    results.append(
-                        self._record(
+                    record = self._record(
                             run_id=run_id,
                             started=started,
                             completed=datetime.now(self.config.timezone),
@@ -252,10 +319,15 @@ class RuntimeRunner:
                             human_report_id=human,
                             extra={"missed_completed_period": period.execution_mode == "CATCH_UP", "stale_lock_recovered": lock.previous_stale},
                         )
+                    record["notification"] = self._notify_combined(
+                        source=source,
+                        combined=combined,
+                        source_result_id=machine,
+                        dry_run=notification_dry_run,
                     )
+                    results.append(record)
                 except Exception as exc:
-                    results.append(
-                        self._record(
+                    record = self._record(
                             run_id=run_id,
                             started=started,
                             completed=datetime.now(self.config.timezone),
@@ -266,10 +338,13 @@ class RuntimeRunner:
                             error={"stage": "COMBINED_RUNTIME_REPORT", "error_category": "DATA_INCOMPLETE", "retry_count": 0, "recoverable": True, "message": str(exc)},
                             idempotency_key=key,
                         )
+                    record["notification"] = self._notify_failure(
+                        record, dry_run=notification_dry_run
                     )
+                    results.append(record)
             return {"status": "BATCH_COMPLETE", "results": results}
         except RuntimeStageError as exc:
-            return self._record(
+            record = self._record(
                 run_id=invocation,
                 started=started,
                 completed=datetime.now(self.config.timezone),
@@ -279,8 +354,12 @@ class RuntimeRunner:
                 attempts=exc.attempts,
                 error={"stage": exc.stage, "error_category": exc.category, "retry_count": max(0, exc.attempts - 1), "recoverable": exc.category in set(self.config.raw["retry"]["retryable_categories"]), "message": str(exc)},
             )
+            record["notification"] = self._notify_failure(
+                record, dry_run=notification_dry_run
+            )
+            return record
         except Exception as exc:
-            return self._record(
+            record = self._record(
                 run_id=invocation,
                 started=started,
                 completed=datetime.now(self.config.timezone),
@@ -289,5 +368,9 @@ class RuntimeRunner:
                 scheduled_period=periods[-1],
                 error={"stage": "RUNTIME", "error_category": "SCHEMA_OR_CONTRACT_ERROR", "retry_count": 0, "recoverable": False, "message": str(exc)},
             )
+            record["notification"] = self._notify_failure(
+                record, dry_run=notification_dry_run
+            )
+            return record
         finally:
             lock.release()

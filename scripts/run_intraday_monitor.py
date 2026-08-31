@@ -17,6 +17,14 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from trend_monitor.providers.hithink import HithinkProvider  # noqa: E402
+from trend_monitor.notifications import (  # noqa: E402
+    BarkAdapter,
+    BarkConfig,
+    NotificationPolicy,
+    NotificationPolicyConfig,
+    NotificationService,
+    NotificationStore,
+)
 from trend_monitor.runtime import (  # noqa: E402
     RuntimeConfig,
     RuntimeRunner,
@@ -53,6 +61,11 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--no-network", action="store_true")
     parser.add_argument("--force", action="store_true")
+    parser.add_argument(
+        "--notification-dry-run",
+        action="store_true",
+        help="evaluate and persist notification decisions without calling Bark",
+    )
     args = parser.parse_args()
     as_of = parse_as_of(args.as_of)
     config = RuntimeConfig.load(
@@ -69,6 +82,18 @@ def main() -> int:
     store = RuntimeStore(PROJECT_ROOT / "data" / "runtime")
     reader = RuntimeSnapshotReader(PROJECT_ROOT)
     pipeline = SubprocessMonitorPipeline(PROJECT_ROOT, config, logger, secrets=secrets)
+    policy_config = NotificationPolicyConfig.load(
+        PROJECT_ROOT / "config" / "notification_policy.json"
+    )
+    bark_config = BarkConfig.load(PROJECT_ROOT / ".env")
+    notification_policy = NotificationPolicy(policy_config)
+    notifier = NotificationService(
+        bark_config=bark_config,
+        policy_config=policy_config,
+        policy=notification_policy,
+        adapter=BarkAdapter(bark_config, policy_config),
+        store=NotificationStore(PROJECT_ROOT / "data" / "notifications"),
+    )
     launched_by_launchd = os.environ.get("TREND_MONITOR_LAUNCHD") == "1"
     runner = RuntimeRunner(
         project_root=PROJECT_ROOT,
@@ -88,12 +113,19 @@ def main() -> int:
             "as_of_override": args.as_of is not None,
             "no_network": args.no_network,
             "force": args.force,
+            "notification_dry_run": args.notification_dry_run,
         },
+        notifier=notifier,
     )
     result = (
         runner.dry_run(as_of=as_of, no_network=args.no_network)
         if args.dry_run
-        else runner.run(as_of=as_of, no_network=args.no_network, force=args.force)
+        else runner.run(
+            as_of=as_of,
+            no_network=args.no_network,
+            force=args.force,
+            notification_dry_run=args.notification_dry_run,
+        )
     )
     if not launched_by_launchd:
         print(json.dumps(result, ensure_ascii=False, indent=2))

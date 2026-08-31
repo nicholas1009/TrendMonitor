@@ -11,7 +11,7 @@ It is designed for transparent monitoring and early-warning workflows—not opaq
 
 > **TrendMonitor is not an automated trading system.** It does not place orders, provide guaranteed investment signals, or replace formal investment decisions. The 60-minute layer is a monitoring and early-warning layer; trading decisions remain outside this framework.
 
-The project is early-stage and actively developed. Its core market and stock monitoring pipeline and local unattended runtime are implemented; broader live acceptance, notification adapters, and additional provider coverage remain ongoing work.
+The project is early-stage and actively developed. Its core market and stock monitoring pipeline, local unattended runtime, and optional Bark notification adapter are implemented; broader live acceptance and additional provider coverage remain ongoing work.
 
 ## Why TrendMonitor?
 
@@ -44,6 +44,7 @@ flowchart TD
     I[No-lookahead Historical Replay]
     J[Runtime Orchestration]
     K[Reports and Append-only Snapshots]
+    L[Optional Bark Notifications]
 
     A --> B
     B --> C
@@ -57,9 +58,10 @@ flowchart TD
     G --> J
     H --> J
     J --> K
+    J --> L
 ```
 
-Notification adapters are planned but are not part of the current runtime.
+The Bark adapter is optional, disabled by default, and isolated from Risk Runtime status. Delivery failures cannot change deterministic Risk Results.
 
 ## Design Principles
 
@@ -106,8 +108,10 @@ Risk rules are versioned. Stored results record the rules version that produced 
 - Append-only risk and runtime snapshots
 - Idempotent macOS `launchd` runtime with lock recovery and catch-up
 - Runtime health and secret-permission checks
+- Event-driven Bark notifications with deduplication and finite retries
+- Simplified-Chinese phone presentation with English internal enums
 
-Industry intraday context is experimental and currently data-limited. Notification adapters are planned. Neither is required by the core market and stock monitoring pipeline.
+Industry intraday context is experimental and currently data-limited. Bark notifications are optional. Neither is required by the core market and stock monitoring pipeline.
 
 ## Data Quality Matters
 
@@ -203,6 +207,24 @@ uv run python scripts/run_intraday_monitor.py
 
 Do not install a scheduler until credentials, data access, paths, calendar behavior, and dry-run health checks pass on your machine. The current scheduler integration targets a macOS user LaunchAgent; installation, idempotency, retry, catch-up, sleep behavior, and operational limits are documented in [Unattended Runtime](docs/UNATTENDED_RUNTIME.md).
 
+### Optional Bark Notifications
+
+Bark notifications are disabled by default. Configure only your local `.env`:
+
+```dotenv
+BARK_ENABLED=false
+BARK_SERVER_URL=https://api.day.app
+BARK_DEVICE_KEY=
+```
+
+Keep `BARK_DEVICE_KEY` secret. Notification manifests and delivery history are local data under `data/` and are excluded from Git. Run the offline notification verification with:
+
+```bash
+uv run python scripts/verify_bark_notification.py
+```
+
+An actual test notification is never sent unless the operator explicitly runs `uv run python scripts/test_bark_notification.py --send`.
+
 ## Generated Data
 
 Local execution creates data and operational artifacts under directories such as:
@@ -262,7 +284,8 @@ TrendMonitor is early-stage and actively developed.
 - Local unattended runtime: implemented
 - Live production acceptance: ongoing
 - Industry intraday context: experimental and data-limited
-- Notification adapters: planned
+- Optional Bark notification adapter: implemented
+- Bark phone presentation: Simplified Chinese; internal protocol values remain English
 
 It should not be represented as a production-ready financial or trading system.
 
@@ -274,8 +297,9 @@ It should not be represented as a production-ready financial or trading system.
 - [x] 15-minute internal structure
 - [x] Stock intraday risk context
 - [x] Local unattended runtime
+- [x] Add optional Bark notification adapter
 - [ ] Complete broader live runtime acceptance
-- [ ] Add notification adapters
+- [ ] Add other notification adapters
 - [ ] Add verified provider integrations
 - [ ] Broaden configurable market and asset coverage
 - [ ] Continue optional industry-context data research

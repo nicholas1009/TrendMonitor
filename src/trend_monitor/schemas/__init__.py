@@ -40,6 +40,12 @@ from .industry_feasibility import (
     IndustryMinuteFeasibilityResult,
 )
 from .runtime import RuntimeRunRecord, ScheduledPeriod
+from .notification import (
+    NotificationEvent,
+    NotificationRecord,
+    NotificationSeverity,
+    NotificationStatus,
+)
 from .system_bar import (
     SourceQualityStatus,
     SystemBar,
@@ -91,6 +97,10 @@ __all__ = [
     "IndustryMinuteFeasibilityResult",
     "RuntimeRunRecord",
     "ScheduledPeriod",
+    "NotificationEvent",
+    "NotificationRecord",
+    "NotificationSeverity",
+    "NotificationStatus",
     "SourceQualityStatus",
     "SystemBar",
     "SystemBarQualityStatus",
