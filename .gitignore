@@ -27,6 +27,12 @@ dist/
 data/
 logs/
 
+# Local business workbooks and market-data research evidence
+legacy/
+research/livermore/**/*.csv
+research/livermore/**/source_manifest.json
+research/livermore/format_task020.py
+
 # macOS and IDE
 .DS_Store
 .idea/
