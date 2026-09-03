@@ -348,6 +348,76 @@ class ChineseNotificationPresenter:
         return title, body
 
     @staticmethod
+    def _auction_number(value: Any, *, decimals: int = 2) -> str:
+        number = float(value)
+        if number.is_integer():
+            return f"{int(number):,}"
+        return f"{number:,.{decimals}f}".rstrip("0").rstrip(".")
+
+    def auction_snapshot(
+        self,
+        items: Sequence[Mapping[str, Any]],
+        *,
+        execution_mode: str,
+    ) -> tuple[str, str]:
+        lines: list[str] = []
+        for item in items:
+            if lines:
+                lines.append("")
+            lines.append(f"【{item['name']}】")
+            fields = (
+                ("auction_pct", "竞价", lambda value: f"{float(value):+.2f}%"),
+                ("auction_price", "竞价价", self._auction_number),
+                (
+                    "auction_amount",
+                    "成交额",
+                    lambda value: f"{self._auction_number(float(value) / 10_000)}万元",
+                ),
+                (
+                    "auction_volume",
+                    "成交量",
+                    lambda value: f"{self._auction_number(value)}手",
+                ),
+                ("auction_volume_ratio", "竞价量比", self._auction_number),
+                (
+                    "auction_yesterday_ratio_pct",
+                    "昨量占比",
+                    lambda value: f"{float(value):.2f}%",
+                ),
+                ("auction_unmatched", "未匹配量", self._auction_number),
+            )
+            for key, label, formatter in fields:
+                value = item.get(key)
+                if value is not None:
+                    lines.append(f"{label}：{formatter(value)}")
+
+        by_symbol = {str(item.get("thscode")): item for item in items}
+        hengtong = by_symbol.get("600487.SH", {})
+        wus = by_symbol.get("002463.SZ", {})
+        left, right = hengtong.get("auction_pct"), wus.get("auction_pct")
+        if isinstance(left, (int, float)) and isinstance(right, (int, float)) and left != right:
+            stronger = "亨通强于沪电" if left > right else "沪电强于亨通"
+            lines.extend(["", "相对竞价表现：", stronger])
+
+        lines.extend(["", "数据源：同花顺", "状态：集合竞价已完成"])
+        if execution_mode == "CATCH_UP":
+            lines.append("采集方式：盘后补采")
+        title = "TrendMonitor｜9:25集合竞价"
+        body = "\n".join(lines)
+        ensure_phone_text(title, body)
+        return title, body
+
+    @staticmethod
+    def auction_failure(incomplete_names: Sequence[str]) -> tuple[str, str]:
+        lines = ["9:25集合竞价数据未能正常取得。", ""]
+        lines.extend(f"{name}：未完成" for name in incomplete_names)
+        lines.extend(["", "请检查数据源状态。"])
+        title = "TrendMonitor｜集合竞价数据异常"
+        body = "\n".join(lines)
+        ensure_phone_text(title, body)
+        return title, body
+
+    @staticmethod
     def test_notification() -> tuple[str, str]:
         return (
             "TrendMonitor｜中文通知测试",

@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 class DataType(StrEnum):
     STATIC_INFO = "static_info"
     QUOTE = "quote"
+    AUCTION = "auction"
     DAILY = "daily"
     KLINE_1M = "1m"
     KLINE_15M = "15m"

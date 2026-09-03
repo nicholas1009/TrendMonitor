@@ -1,6 +1,7 @@
 """TASK_013 unattended runtime public API."""
 
 from .calendar import TradingCalendarStore
+from .auction import AuctionRunner, AuctionTarget, parse_auction_snapshot, resolve_auction_targets
 from .acceptance import build_acceptance, system_evidence
 from .config import RuntimeConfig
 from .lock import ProcessLock
@@ -11,6 +12,8 @@ from .store import RuntimeStore
 
 __all__ = [
     "ProcessLock",
+    "AuctionRunner",
+    "AuctionTarget",
     "build_acceptance",
     "RuntimeConfig",
     "RuntimeRunner",
@@ -19,6 +22,8 @@ __all__ = [
     "SubprocessMonitorPipeline",
     "TradingCalendarStore",
     "due_periods",
+    "parse_auction_snapshot",
+    "resolve_auction_targets",
     "retry_action",
     "system_evidence",
 ]

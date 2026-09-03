@@ -173,6 +173,32 @@ class NotificationService:
             dry_run=dry_run,
         )
 
+    def process_auction_snapshot(
+        self,
+        snapshot: dict[str, Any],
+        *,
+        source_result_id: str,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        return self.process_events(
+            self.policy.evaluate_auction_snapshot(
+                snapshot,
+                source_result_id=source_result_id,
+            ),
+            dry_run=dry_run,
+        )
+
+    def process_auction_failure(
+        self,
+        record: dict[str, Any],
+        *,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        return self.process_events(
+            self.policy.evaluate_auction_failure(record),
+            dry_run=dry_run,
+        )
+
     def process_test(self, *, send: bool) -> dict[str, Any]:
         event = self.policy.test_event(created_at=self.now().isoformat())
         return self.process_events(

@@ -3,11 +3,13 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import date, datetime, timedelta
 import json
+import io
 import logging
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from trend_monitor.runtime import (
@@ -20,10 +22,12 @@ from trend_monitor.runtime import (
     retry_action,
 )
 from trend_monitor.runtime.logging import runtime_logger
+from trend_monitor.runtime.health import inspect_launch_agent
 from trend_monitor.runtime.security import audit_dotenv
 from trend_monitor.runtime.pipeline import (
     PipelineRefreshResult,
     RuntimeStageError,
+    SubprocessMonitorPipeline,
     build_combined_result,
     classify_stage_failure,
 )
@@ -57,6 +61,21 @@ def source(period_end: str) -> dict:
         "risk_direction": "FLAT",
         "signal_confidence": "HIGH",
         "breadth": {"advance_count": 4},
+        "persistent_weakness": {"count": 3, "points": 1},
+        "downside_shocks": {"count": 1, "points": 1, "feature_unavailable": []},
+        "weighted_support_distortion": False,
+        "small_cap_stress": True,
+        "broad_selloff_resonance": True,
+        "strong_broad_weakness": False,
+        "broad_repair": False,
+        "repair_count": 0,
+        "score_components": {
+            "breadth_points": 1,
+            "persistent_weakness_points": 1,
+            "downside_shock_points": 0,
+            "weighted_support_distortion_points": 0,
+            "broad_repair_offset": 0,
+        },
         "index_states": [{"instrument_id": str(i)} for i in range(8)],
         "data_quality": {"valid_index_count": 8, "preflight": {str(i): "PASS_WITH_DEGRADATION" for i in range(8)}},
     }
@@ -78,12 +97,30 @@ def source(period_end: str) -> dict:
                 "risk_light": "YELLOW",
                 "risk_direction": "FLAT",
                 "confidence": "HIGH",
+                "current_return": -0.01,
+                "previous_return": -0.005,
+                "two_period_return": -0.01495,
+                "relative_return": -0.002,
+                "market_relationship": "WEAKER_THAN_MARKET",
+                "persistent_weakness": True,
+                "downside_shock": False,
+                "relative_weakness": False,
+                "market_resonance": True,
+                "repair_state": "NONE",
+                "score_components": {
+                    "persistent_weakness_points": 1,
+                    "downside_shock_points": 0,
+                    "relative_weakness_points": 0,
+                    "market_resonance_points": 1,
+                    "full_close_repair_offset": 0,
+                },
                 "data_quality": {"lookahead_safe": True},
             },
             "stock_15m": {
                 "rules_version": "stock_15m_internal_v0.1",
                 "classification": "MIXED",
                 "direction_sequence": ["UP", "DOWN", "UP", "DOWN"],
+                "joint_market_flags": ["JOINT_WEAKNESS"],
                 "data_quality": {"lookahead_safe": True},
             },
         }
@@ -125,6 +162,29 @@ class FakePipeline:
     def refresh(self, *, as_of):
         self.calls += 1
         return PipelineRefreshResult(5, ({"status": "PASS"},))
+
+
+class FailingPipeline:
+    def __init__(self, category="PIPELINE_FAILED"):
+        self.calls = 0
+        self.category = category
+
+    def refresh(self, *, as_of):
+        self.calls += 1
+        raise RuntimeStageError(
+            self.category,
+            "MARKET_15M_INTERNAL",
+            "cached history coverage is incomplete",
+        )
+
+
+class FailureNotifier:
+    def __init__(self):
+        self.failure_calls = 0
+
+    def process_runtime_failure(self, record, *, dry_run=False):
+        self.failure_calls += 1
+        return {"status": "SENT", "event_count": 1}
 
 
 class ScheduleTests(unittest.TestCase):
@@ -196,6 +256,54 @@ class LockRetryTests(unittest.TestCase):
     def test_failure_classifier(self):
         self.assertEqual(classify_stage_failure("UNSUPPORTED period"), "UNSUPPORTED")
         self.assertEqual(classify_stage_failure("NETWORK_ERROR"), "NETWORK_ERROR")
+        self.assertEqual(
+            classify_stage_failure("TEMPORARY_PROVIDER_ERROR — closing bar not ready"),
+            "TEMPORARY_PROVIDER_ERROR",
+        )
+
+    @patch("trend_monitor.runtime.pipeline.subprocess.run")
+    def test_market_refresh_passes_as_of_and_records_failure_observability(self, run):
+        raw = deepcopy(CONFIG.raw)
+        raw["pipeline_stages"] = [
+            {
+                "name": "MARKET_DATA_REFRESH",
+                "script": "scripts/verify_market_index_coverage.py",
+            }
+        ]
+        raw["retry"] = {
+            "max_attempts": 1,
+            "backoff_seconds": [],
+            "retryable_categories": raw["retry"]["retryable_categories"],
+        }
+        config = RuntimeConfig(raw, project_root=ROOT)
+        run.return_value = type(
+            "Completed",
+            (),
+            {
+                "returncode": 1,
+                "stdout": "coverage incomplete",
+                "stderr": "provider detail",
+            },
+        )()
+        stream = io.StringIO()
+        logger = logging.getLogger(f"stage-failure-{id(self)}")
+        logger.handlers.clear()
+        logger.addHandler(logging.StreamHandler(stream))
+        pipeline = SubprocessMonitorPipeline(ROOT, config, logger, secrets=())
+        as_of = datetime(2026, 9, 3, 10, 33, 5, tzinfo=SHANGHAI)
+
+        with self.assertRaises(RuntimeStageError) as raised:
+            pipeline.refresh(as_of=as_of)
+
+        error = raised.exception
+        command = run.call_args.args[0]
+        self.assertEqual(command[-2:], ["--as-of", as_of.isoformat()])
+        self.assertEqual(error.exit_code, 1)
+        self.assertIsNotNone(error.duration_seconds)
+        self.assertEqual(error.stdout_tail, "coverage incomplete")
+        self.assertEqual(error.stderr_tail, "provider detail")
+        self.assertIn("status=FAILED", stream.getvalue())
+        self.assertIn("exit_code=1", stream.getvalue())
 
 
 class StoreSecurityTests(unittest.TestCase):
@@ -248,6 +356,118 @@ class StoreSecurityTests(unittest.TestCase):
             self.assertEqual((result["status"], result["reason"]), ("FAIL", "ENV_PERMISSION_MUST_BE_0600"))
 
 
+class LaunchAgentHealthTests(unittest.TestCase):
+    class Store:
+        @staticmethod
+        def entries():
+            return [
+                {
+                    "run_id": "launchd-observation",
+                    "started_at": "2026-08-31T19:45:13+08:00",
+                    "status": "SKIPPED_ALREADY_COMPLETED",
+                    "execution_mode": "CATCH_UP",
+                    "extra": {"trigger_source": "LAUNCHD"},
+                }
+            ]
+
+    @staticmethod
+    def command(returncode=0, stdout=""):
+        return type(
+            "CommandResult",
+            (),
+            {"returncode": returncode, "stdout": stdout, "stderr": ""},
+        )()
+
+    def setup_paths(self, root: Path) -> tuple[Path, Path]:
+        installed = root / "Library" / "LaunchAgents" / "agent.plist"
+        installed.parent.mkdir(parents=True)
+        installed.write_text("plist", encoding="utf-8")
+        program = root / "bin" / "uv"
+        program.parent.mkdir(parents=True)
+        program.write_text("uv", encoding="utf-8")
+        (root / "logs" / "runtime").mkdir(parents=True)
+        heartbeat = root / "data" / "runtime" / "launchd_heartbeat.json"
+        heartbeat.parent.mkdir(parents=True)
+        heartbeat.write_text(
+            json.dumps(
+                {
+                    "observed_at": "2026-08-31T20:09:58+09:00",
+                    "label": "com.trendmonitor.local.intraday",
+                    "pid": 123,
+                }
+            ),
+            encoding="utf-8",
+        )
+        return installed, program
+
+    @patch("trend_monitor.runtime.health.subprocess.run")
+    def test_loaded_launch_agent_reports_lifecycle_and_heartbeat(self, run):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            installed, program = self.setup_paths(root)
+            launch_output = (
+                "state = not running\n"
+                f"program = {program}\n"
+                f"working directory = {root.resolve()}\n"
+                "runs = 71\n"
+                "last exit code = 0\n"
+                "run interval = 60 seconds\n"
+            )
+            run.side_effect = [
+                self.command(stdout=launch_output),
+                self.command(stdout='"com.trendmonitor.local.intraday" => enabled\n'),
+            ]
+            result = inspect_launch_agent(
+                root,
+                self.Store(),
+                now=datetime(2026, 8, 31, 19, 10, tzinfo=SHANGHAI),
+                installed_path=installed,
+                uid=501,
+            )
+            self.assertEqual((result["status"], result["reason"]), ("PASS", None))
+            self.assertTrue(result["loaded"])
+            self.assertFalse(result["disabled"])
+            self.assertEqual(result["run_interval_seconds"], 60)
+            self.assertEqual(result["last_runner_heartbeat"]["status"], "OBSERVED")
+            self.assertEqual(result["last_launch_observation"]["status"], "OBSERVED")
+
+    @patch("trend_monitor.runtime.health.subprocess.run")
+    def test_installed_but_unloaded_has_specific_reason(self, run):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            installed, _ = self.setup_paths(root)
+            run.side_effect = [
+                self.command(returncode=113),
+                self.command(stdout="disabled services = {}\n"),
+            ]
+            result = inspect_launch_agent(
+                root,
+                self.Store(),
+                now=datetime(2026, 8, 31, 19, 10, tzinfo=SHANGHAI),
+                installed_path=installed,
+                uid=501,
+            )
+            self.assertEqual(result["reason"], "LAUNCH_AGENT_NOT_LOADED")
+
+    @patch("trend_monitor.runtime.health.subprocess.run")
+    def test_disabled_launch_agent_has_specific_reason(self, run):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            installed, _ = self.setup_paths(root)
+            run.side_effect = [
+                self.command(returncode=113),
+                self.command(stdout='"com.trendmonitor.local.intraday" => disabled\n'),
+            ]
+            result = inspect_launch_agent(
+                root,
+                self.Store(),
+                now=datetime(2026, 8, 31, 19, 10, tzinfo=SHANGHAI),
+                installed_path=installed,
+                uid=501,
+            )
+            self.assertEqual(result["reason"], "LAUNCH_AGENT_DISABLED")
+
+
 class SnapshotAndRunnerTests(unittest.TestCase):
     def test_real_replay_reader_and_lookahead(self):
         result = RuntimeSnapshotReader(ROOT).load_period("2026-08-28T15:00:00+08:00")
@@ -256,13 +476,29 @@ class SnapshotAndRunnerTests(unittest.TestCase):
         self.assertTrue(combined["data"]["lookahead_safe"])
         self.assertEqual(combined["data"]["industry_context"], "DEFERRED")
 
-    def _runner(self, tmp, *, trading=True, pipeline=None):
+    def test_combined_report_preserves_existing_risk_explanations(self):
+        period = periods("10:33", historical=True)[0]
+        combined = build_combined_result(
+            source(period.period_end),
+            scheduled_period=period,
+            generated_at=datetime.now(SHANGHAI),
+        )
+
+        self.assertEqual(combined["market"]["score_components"]["breadth_points"], 1)
+        self.assertEqual(combined["market"]["persistent_weakness"]["count"], 3)
+        stock = combined["stocks"]["stock.hengtong_optic"]
+        self.assertEqual(stock["score_components"]["market_resonance_points"], 1)
+        self.assertEqual(stock["market_relationship"], "WEAKER_THAN_MARKET")
+        self.assertEqual(stock["15m_joint_market_flags"], ["JOINT_WEAKNESS"])
+
+    def _runner(self, tmp, *, trading=True, pipeline=None, notifier=None):
         logger = logging.getLogger(f"runtime-test-{tmp}")
         logger.handlers.clear(); logger.addHandler(logging.NullHandler())
         return RuntimeRunner(
             project_root=ROOT, config=CONFIG, calendar=StaticCalendar(trading),
             store=RuntimeStore(Path(tmp) / "runtime"), reader=FakeReader(),
             pipeline=pipeline, logger=logger, lock_path=Path(tmp) / "runner.lock",
+            notifier=notifier,
         )
 
     def test_non_trading_day_skips_without_pipeline(self):
@@ -319,6 +555,130 @@ class SnapshotAndRunnerTests(unittest.TestCase):
             )
             self.assertEqual(result["results"][0]["status"], "FAILED")
             self.assertEqual(store.entries()[0]["error_summary"]["stage"], "COMBINED_RUNTIME_REPORT")
+
+    def test_non_recoverable_failure_is_terminal_until_operator_force(self):
+        with TemporaryDirectory() as tmp:
+            pipeline = FailingPipeline()
+            notifier = FailureNotifier()
+            runner = self._runner(tmp, pipeline=pipeline, notifier=notifier)
+            store = runner.store
+            as_of = datetime(2026, 8, 28, 10, 33, tzinfo=SHANGHAI)
+
+            first = runner.run(as_of=as_of)
+            first_skip = runner.run(as_of=as_of)
+            second_skip = runner.run(as_of=as_of)
+
+            self.assertEqual(first["status"], "FAILED")
+            self.assertFalse(first["error_summary"]["recoverable"])
+            self.assertIsNotNone(first["idempotency_key"])
+            self.assertEqual(first_skip["status"], "SKIPPED_TERMINAL_FAILURE")
+            self.assertEqual(second_skip["status"], "SKIPPED_TERMINAL_FAILURE")
+            self.assertEqual(
+                first_skip["extra"]["skip_reason"],
+                "NON_RECOVERABLE_FAILURE_ALREADY_RECORDED",
+            )
+            self.assertEqual(first_skip["skip_key"], second_skip["skip_key"])
+            self.assertEqual(
+                first_skip["extra"]["prior_terminal_failure_run_id"],
+                first["run_id"],
+            )
+            self.assertEqual(second_skip["prior_terminal_failure_run_id"], first["run_id"])
+            self.assertEqual(pipeline.calls, 1)
+            self.assertEqual(notifier.failure_calls, 1)
+            self.assertEqual(
+                [item["status"] for item in store.entries()],
+                ["FAILED", "SKIPPED_TERMINAL_FAILURE"],
+            )
+
+            forced = runner.run(as_of=as_of, force=True)
+            self.assertEqual(forced["status"], "FAILED")
+            self.assertEqual(pipeline.calls, 2)
+
+    def test_legacy_terminal_failure_without_idempotency_key_is_detected(self):
+        with TemporaryDirectory() as tmp:
+            pipeline = FakePipeline()
+            runner = self._runner(tmp, pipeline=pipeline)
+            store = runner.store
+            period = periods("10:33")[-1]
+            legacy = RuntimeRunRecord(
+                run_id="legacy-terminal",
+                scheduled_period=period.to_dict(),
+                started_at="2026-08-28T10:33:00+08:00",
+                completed_at="2026-08-28T10:33:01+08:00",
+                duration_seconds=1,
+                trading_date=period.trading_date,
+                period_end=period.period_end,
+                status="FAILED",
+                network_attempts=1,
+                market_result_id=None,
+                market_15m_result_id=None,
+                stock_result_ids={},
+                error_summary={
+                    "stage": "MARKET_15M_INTERNAL",
+                    "error_category": "PIPELINE_FAILED",
+                    "retry_count": 0,
+                    "recoverable": False,
+                },
+                rules_versions=CONFIG.rules_versions,
+                execution_mode=period.execution_mode,
+                notification_eligibility=period.notification_eligibility,
+            )
+            store.append(legacy)
+
+            result = runner.run(
+                as_of=datetime(2026, 8, 28, 10, 33, tzinfo=SHANGHAI)
+            )
+
+            self.assertEqual(result["status"], "SKIPPED_TERMINAL_FAILURE")
+            self.assertEqual(result["extra"]["prior_terminal_failure_run_id"], "legacy-terminal")
+            self.assertEqual(pipeline.calls, 0)
+
+    def test_latest_terminal_failure_short_circuits_earlier_missing_periods(self):
+        with TemporaryDirectory() as tmp:
+            pipeline = FakePipeline()
+            runner = self._runner(tmp, pipeline=pipeline)
+            store = runner.store
+            latest = periods("15:03")[-1]
+            terminal = RuntimeRunRecord(
+                run_id="latest-terminal",
+                scheduled_period=latest.to_dict(),
+                started_at="2026-08-28T15:03:00+08:00",
+                completed_at="2026-08-28T15:03:01+08:00",
+                duration_seconds=1,
+                trading_date=latest.trading_date,
+                period_end=latest.period_end,
+                status="FAILED",
+                network_attempts=1,
+                market_result_id=None,
+                market_15m_result_id=None,
+                stock_result_ids={},
+                error_summary={"recoverable": False},
+                rules_versions=CONFIG.rules_versions,
+                execution_mode=latest.execution_mode,
+                notification_eligibility=latest.notification_eligibility,
+            )
+            store.append(terminal)
+
+            result = runner.run(
+                as_of=datetime(2026, 8, 28, 15, 3, tzinfo=SHANGHAI)
+            )
+
+            self.assertEqual(result["status"], "SKIPPED_TERMINAL_FAILURE")
+            self.assertEqual(result["period_end"], latest.period_end)
+            self.assertEqual(pipeline.calls, 0)
+
+    def test_recoverable_failure_is_not_treated_as_terminal(self):
+        with TemporaryDirectory() as tmp:
+            pipeline = FailingPipeline("NETWORK_ERROR")
+            runner = self._runner(tmp, pipeline=pipeline)
+            as_of = datetime(2026, 8, 28, 10, 33, tzinfo=SHANGHAI)
+
+            first = runner.run(as_of=as_of)
+            second = runner.run(as_of=as_of)
+
+            self.assertTrue(first["error_summary"]["recoverable"])
+            self.assertTrue(second["error_summary"]["recoverable"])
+            self.assertEqual(pipeline.calls, 2)
 
 
 if __name__ == "__main__":

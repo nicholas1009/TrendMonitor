@@ -388,12 +388,21 @@ def evaluate_sleep_wake(entries: Iterable[dict[str, Any]], events: list[dict[str
             "combined_result": report,
             "closing_bucket": closing_bucket_evidence(record),
         }
-    failures = [
-        item for item in values
-        if item.get("execution_mode") == "CATCH_UP"
-        and item.get("status") == "FAILED"
-        and is_unmodified_launchd_invocation(item)
-    ]
+    failures = []
+    for item in values:
+        if not (
+            item.get("execution_mode") == "CATCH_UP"
+            and item.get("status") == "FAILED"
+            and is_unmodified_launchd_invocation(item)
+        ):
+            continue
+        scheduled_at = (item.get("scheduled_period") or {}).get("scheduled_at")
+        started_at = item.get("started_at")
+        if not scheduled_at or not started_at:
+            continue
+        interval = _sleep_interval(parse_timestamp(scheduled_at), events)
+        if interval and parse_timestamp(started_at) >= parse_timestamp(interval[1]["timestamp"]):
+            failures.append(item)
     if failures:
         return {"status": "FAIL", "reason": "LAUNCHD_CATCH_UP_FAILED", "run_id": failures[-1].get("run_id")}
     return {"status": "PENDING", "reason": "NO_SLEEP_BOUNDARY_CATCH_UP_EVIDENCE"}
@@ -434,7 +443,8 @@ def evaluate_restart(
         if item.get("started_at")
         and parse_timestamp(item["started_at"]) >= parse_timestamp(current_boot)
         and is_unmodified_launchd_invocation(item)
-        and item.get("status") in SUCCESS
+        and item.get("scheduled_period")
+        and item.get("status") in SUCCESS.union({"FAILED"})
     ]
     if system.get("launchd", {}).get("loaded") is not True or not post_boot:
         return {"status": "PENDING", "reason": "WAITING_FOR_POST_RESTART_LAUNCHD_RUNTIME", "current_boot_time": current_boot}

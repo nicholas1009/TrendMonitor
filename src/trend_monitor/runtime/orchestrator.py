@@ -143,7 +143,16 @@ class RuntimeRunner:
             human_report_id=human_report_id,
             skip_key=skip_key,
         )
-        return record.to_dict()
+        payload = record.to_dict()
+        payload.update(
+            {
+                "idempotency_key": idempotency_key,
+                "result_sha256": result_sha256,
+                "human_report_id": human_report_id,
+                "skip_key": skip_key,
+            }
+        )
+        return payload
 
     def dry_run(self, *, as_of: datetime, no_network: bool) -> dict[str, Any]:
         hashes = self.config.verify_frozen_rules()
@@ -264,10 +273,55 @@ class RuntimeRunner:
             )
         try:
             targets = []
+            terminal_failures = []
             for period in periods:
                 key = period_identity(period, self.config.rules_versions)
-                if force or self.store.completed(key) is None:
+                if force:
                     targets.append((period, key))
+                    continue
+                if self.store.completed(key) is not None:
+                    continue
+                terminal = self.store.terminal_failure(key)
+                if terminal is not None:
+                    terminal_failures.append((period, key, terminal))
+                    continue
+                targets.append((period, key))
+            latest_period = periods[-1]
+            latest_key = period_identity(latest_period, self.config.rules_versions)
+            latest_terminal = next(
+                (
+                    terminal
+                    for period, key, terminal in reversed(terminal_failures)
+                    if key == latest_key
+                ),
+                None,
+            )
+            if latest_terminal is not None:
+                skip_key = f"TERMINAL_FAILED|{latest_key}"
+                skip_reason = "NON_RECOVERABLE_FAILURE_ALREADY_RECORDED"
+                if self.store.skipped_already_recorded(skip_key):
+                    return {
+                        "status": "SKIPPED_TERMINAL_FAILURE",
+                        "already_recorded": True,
+                        "period_end": latest_period.period_end,
+                        "skip_key": skip_key,
+                        "skip_reason": skip_reason,
+                        "prior_terminal_failure_run_id": latest_terminal.get("run_id"),
+                    }
+                return self._record(
+                    run_id=invocation,
+                    started=started,
+                    completed=datetime.now(self.config.timezone),
+                    trading_date=latest_period.trading_date,
+                    status="SKIPPED_TERMINAL_FAILURE",
+                    scheduled_period=latest_period,
+                    idempotency_key=latest_key,
+                    skip_key=skip_key,
+                    extra={
+                        "skip_reason": skip_reason,
+                        "prior_terminal_failure_run_id": latest_terminal.get("run_id"),
+                    },
+                )
             if not targets:
                 latest, key = periods[-1], period_identity(periods[-1], self.config.rules_versions)
                 existing = self.store.completed(key) or {}
@@ -344,29 +398,58 @@ class RuntimeRunner:
                     results.append(record)
             return {"status": "BATCH_COMPLETE", "results": results}
         except RuntimeStageError as exc:
+            failed_period, failed_key = (
+                targets[-1]
+                if 'targets' in locals() and targets
+                else (
+                    periods[-1],
+                    period_identity(periods[-1], self.config.rules_versions),
+                )
+            )
             record = self._record(
                 run_id=invocation,
                 started=started,
                 completed=datetime.now(self.config.timezone),
                 trading_date=as_of.date().isoformat(),
                 status="FAILED",
-                scheduled_period=targets[-1][0] if 'targets' in locals() and targets else periods[-1],
+                scheduled_period=failed_period,
                 attempts=exc.attempts,
-                error={"stage": exc.stage, "error_category": exc.category, "retry_count": max(0, exc.attempts - 1), "recoverable": exc.category in set(self.config.raw["retry"]["retryable_categories"]), "message": str(exc)},
+                error={
+                    "stage": exc.stage,
+                    "error_category": exc.category,
+                    "retry_count": max(0, exc.attempts - 1),
+                    "recoverable": exc.category in set(self.config.raw["retry"]["retryable_categories"]),
+                    "message": str(exc),
+                    "command": list(exc.command),
+                    "exit_code": exc.exit_code,
+                    "duration_seconds": exc.duration_seconds,
+                    "stdout_tail": exc.stdout_tail,
+                    "stderr_tail": exc.stderr_tail,
+                },
+                idempotency_key=failed_key,
             )
             record["notification"] = self._notify_failure(
                 record, dry_run=notification_dry_run
             )
             return record
         except Exception as exc:
+            failed_period, failed_key = (
+                targets[-1]
+                if 'targets' in locals() and targets
+                else (
+                    periods[-1],
+                    period_identity(periods[-1], self.config.rules_versions),
+                )
+            )
             record = self._record(
                 run_id=invocation,
                 started=started,
                 completed=datetime.now(self.config.timezone),
                 trading_date=as_of.date().isoformat(),
                 status="FAILED",
-                scheduled_period=periods[-1],
+                scheduled_period=failed_period,
                 error={"stage": "RUNTIME", "error_category": "SCHEMA_OR_CONTRACT_ERROR", "retry_count": 0, "recoverable": False, "message": str(exc)},
+                idempotency_key=failed_key,
             )
             record["notification"] = self._notify_failure(
                 record, dry_run=notification_dry_run

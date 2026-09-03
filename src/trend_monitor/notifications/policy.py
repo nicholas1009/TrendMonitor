@@ -303,6 +303,51 @@ class NotificationPolicy:
             ),
         )
 
+    def evaluate_auction_snapshot(
+        self,
+        snapshot: dict[str, Any],
+        *,
+        source_result_id: str,
+    ) -> tuple[NotificationEvent, ...]:
+        title, body = self.presenter.auction_snapshot(
+            snapshot["items"],
+            execution_mode=str(snapshot["execution_mode"]),
+        )
+        return (
+            self._event(
+                event_type="AUCTION_FINAL_SNAPSHOT",
+                instrument_id="auction.final_snapshot",
+                trading_date=str(snapshot["trading_date"]),
+                period_end=str(snapshot["scheduled_at"]),
+                rules_version=self.config.rules_version,
+                severity=NotificationSeverity.INFO,
+                title=title,
+                body=body,
+                execution_mode=str(snapshot["execution_mode"]),
+                source_result_id=source_result_id,
+            ),
+        )
+
+    def evaluate_auction_failure(
+        self,
+        record: dict[str, Any],
+    ) -> tuple[NotificationEvent, ...]:
+        title, body = self.presenter.auction_failure(record["incomplete_names"])
+        return (
+            self._event(
+                event_type="AUCTION_FINAL_SNAPSHOT_FAILED",
+                instrument_id="auction.final_snapshot",
+                trading_date=str(record["trading_date"]),
+                period_end=str(record["scheduled_at"]),
+                rules_version=self.config.rules_version,
+                severity=NotificationSeverity.ERROR,
+                title=title,
+                body=body,
+                execution_mode=str(record["execution_mode"]),
+                source_result_id=str(record["run_id"]),
+            ),
+        )
+
     def test_event(self, *, created_at: str) -> NotificationEvent:
         title, body = self.presenter.test_notification()
         return self._event(

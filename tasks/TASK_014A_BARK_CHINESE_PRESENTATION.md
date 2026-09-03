@@ -1,7 +1,7 @@
 # TASK_014A｜Bark phone notification Simplified-Chinese presentation v0.1
 
-- Status: `PARTIAL`
-- Pending reason: `PENDING_OPERATOR_CONFIRMATION`
+- Status: `SUCCESS`
+- Chinese Bark presentation: `VERIFIED`
 - Phone presentation: `SIMPLIFIED_CHINESE`
 - Internal protocol: `ENGLISH`
 - Scope: phone notification `title` and `body` presentation only.
@@ -10,5 +10,5 @@
 - Policy immutability: event count, event type, severity, deduplication key, catch-up policy, retry behavior, and Runtime isolation remain unchanged.
 - Regression: 247 unit and regression tests pass; frozen Market and Stock Risk rule and replay hashes remain unchanged.
 - Bark test: one explicit Chinese `event_type=TEST` request was accepted by Bark in one attempt.
-- Operator evidence: receipt of the specific Chinese test notification on the iPhone has not yet been explicitly confirmed, so `CHINESE BARK PRESENTATION = VERIFIED` is not claimed.
+- Operator evidence: the specific Chinese test notification was received on the iPhone; its title and body displayed correctly in Simplified Chinese without internal English enums.
 - Production limit: TASK_013A remains pending live trading-day evidence; notification delivery does not establish unattended production readiness.

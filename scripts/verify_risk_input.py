@@ -3,7 +3,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+import argparse
+from datetime import datetime, timedelta
 import json
 from pathlib import Path
 import sys
@@ -20,7 +21,7 @@ from trend_monitor.providers.longbridge import LongbridgeMarketDataAdapter, Long
 from trend_monitor.quality import RiskFeatureContract  # noqa: E402
 from trend_monitor.registry import InstrumentRegistry, MappingType  # noqa: E402
 from trend_monitor.risk_input import RiskInputService, RiskInputSnapshotStore  # noqa: E402
-from trend_monitor.schemas import GroupEntry, PreflightStatus, RiskInputGroup  # noqa: E402
+from trend_monitor.schemas import DataType, GroupEntry, PreflightStatus, RiskInputGroup  # noqa: E402
 from trend_monitor.services import MarketDataService  # noqa: E402
 
 
@@ -77,15 +78,27 @@ def provenance_check(bundle) -> bool:
     return True
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--as-of", help="Timezone-aware ISO timestamp for the Risk Input snapshot.")
+    return parser.parse_args()
+
+
 def main() -> int:
-    as_of = datetime.now(SHANGHAI)
+    args = parse_args()
+    as_of = (
+        datetime.fromisoformat(args.as_of).astimezone(SHANGHAI)
+        if args.as_of
+        else datetime.now(SHANGHAI)
+    )
     registry = InstrumentRegistry.load(PROJECT_ROOT / "config" / "instruments.json")
     contract = RiskFeatureContract.load(PROJECT_ROOT / "config" / "risk_feature_contract.json")
     cache = RawCache(PROJECT_ROOT / "data" / "raw")
+    longbridge_provider = LongbridgeProvider(dotenv_path=PROJECT_ROOT / ".env")
     market_data = MarketDataService(
         registry,
         (
-            LongbridgeMarketDataAdapter(LongbridgeProvider(dotenv_path=PROJECT_ROOT / ".env")),
+            LongbridgeMarketDataAdapter(longbridge_provider),
             HithinkMarketDataAdapter(HithinkProvider(dotenv_path=str(PROJECT_ROOT / ".env"))),
         ),
         cache,
@@ -103,6 +116,36 @@ def main() -> int:
     bundles = {}
     snapshot_paths = {}
     failures = 0
+
+    # The downstream frozen 80-period stock replay needs one rolling cache
+    # entry that covers both its historical window and today's completed bars.
+    # build_bundle() intentionally fetches only the current-day window.
+    history_start = as_of.date() - timedelta(days=130)
+    history_end = as_of.date()
+    for instrument_id in REAL_INSTRUMENTS[:2]:
+        mapping = registry.resolve(instrument_id, "longbridge")
+        for period in ("15m", "60m"):
+            raw = longbridge_provider.get_history_candlesticks(
+                mapping.provider_symbol,
+                period=period,
+                start=history_start,
+                end=history_end,
+            )
+            cache.save(
+                instrument_id=instrument_id,
+                provider="longbridge",
+                provider_symbol=mapping.provider_symbol,
+                data_type=DataType(period),
+                raw=raw,
+                request_start=int(
+                    datetime.combine(history_start, datetime.min.time(), tzinfo=SHANGHAI).timestamp()
+                    * 1000
+                ),
+                request_end=int(
+                    datetime.combine(history_end, datetime.max.time(), tzinfo=SHANGHAI).timestamp()
+                    * 1000
+                ),
+            )
 
     for instrument_id in REAL_INSTRUMENTS:
         print(f"[ASSEMBLE] {instrument_id}")

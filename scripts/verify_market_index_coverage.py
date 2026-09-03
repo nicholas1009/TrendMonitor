@@ -3,8 +3,9 @@
 
 from __future__ import annotations
 
+import argparse
 from collections import Counter
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 import json
 from pathlib import Path
 import sys
@@ -52,6 +53,44 @@ NEW_INDEXES = (
 )
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--as-of",
+        help="Timezone-aware ISO timestamp used to cap the live Risk Input snapshot.",
+    )
+    return parser.parse_args()
+
+
+def expected_completed_bars(as_of: datetime) -> tuple[int, int]:
+    """Return completed 15m/60m System Bar counts at a scheduled boundary."""
+
+    if as_of.tzinfo is None:
+        raise ValueError("as_of must be timezone-aware")
+    clock = as_of.astimezone(SHANGHAI).timetz().replace(tzinfo=None)
+    if clock >= time(15, 0):
+        return 16, 4
+    if clock >= time(14, 0):
+        return 12, 3
+    if clock >= time(11, 30):
+        return 8, 2
+    if clock >= time(10, 30):
+        return 4, 1
+    raise ValueError("no completed 60m monitoring period at as_of")
+
+
+def within_live_readiness_window(as_of: datetime) -> bool:
+    """Match the existing scheduled+10 minute live grace, without adding a loop."""
+
+    clock = as_of.astimezone(SHANGHAI).timetz().replace(tzinfo=None)
+    for boundary in (time(10, 30), time(11, 30), time(14, 0), time(15, 0)):
+        end = datetime.combine(as_of.date(), boundary, tzinfo=SHANGHAI)
+        scheduled = end + timedelta(minutes=3)
+        if scheduled.time() <= clock <= (scheduled + timedelta(minutes=10)).time():
+            return True
+    return False
+
+
 def source_day(timestamp: int) -> str:
     return datetime.fromtimestamp(timestamp, tz=timezone.utc).astimezone(SHANGHAI).date().isoformat()
 
@@ -78,7 +117,13 @@ def provenance_ok(bundle) -> bool:
 
 
 def main() -> int:
-    as_of = datetime.now(SHANGHAI)
+    args = parse_args()
+    as_of = (
+        datetime.fromisoformat(args.as_of).astimezone(SHANGHAI)
+        if args.as_of
+        else datetime.now(SHANGHAI)
+    )
+    expected_15m, expected_60m = expected_completed_bars(as_of)
     today = as_of.date()
     history_start = today - timedelta(days=40)
     history_end = today
@@ -108,6 +153,7 @@ def main() -> int:
     bundles = {}
     snapshot_paths = {}
     failures = 0
+    current_bar_shortfalls: list[str] = []
 
     for instrument_id, expected_name, expected_symbol in NEW_INDEXES:
         print(expected_name.upper())
@@ -254,9 +300,9 @@ def main() -> int:
             fields_ok = feature_contract_ok(bundle)
             trace_ok = provenance_ok(bundle)
             ready = (
-                bundle.preflight_status is PreflightStatus.PASS_WITH_DEGRADATION
-                and len(bundle.risk_60m.system_bars) == 4
-                and len(bundle.support_15m.system_bars) == 16
+                bundle.preflight_status is not PreflightStatus.BLOCKED
+                and len(bundle.risk_60m.system_bars) == expected_60m
+                and len(bundle.support_15m.system_bars) == expected_15m
                 and fields_ok
                 and trace_ok
                 and replay_ok
@@ -279,6 +325,11 @@ def main() -> int:
             )
             if not ready:
                 failures += 1
+                if (
+                    len(bundle.risk_60m.system_bars) < expected_60m
+                    or len(bundle.support_15m.system_bars) < expected_15m
+                ):
+                    current_bar_shortfalls.append(instrument_id)
             bundles[instrument_id] = bundle
             snapshot_paths[instrument_id] = snapshot_path
         except Exception as exc:
@@ -291,6 +342,37 @@ def main() -> int:
     # the final group snapshot contains eight current, append-only inputs.
     for instrument_id in ("index.csi500", "index.star50"):
         try:
+            mapping = registry.resolve(instrument_id, "longbridge")
+            # Keep the rolling historical Raw Cache contract symmetric across
+            # all eight indexes.  build_bundle() only fetches the current-day
+            # window, which cannot feed the frozen 80-period 15m replay by
+            # itself when the replay advances to a new trading day.
+            for period in ("15m", "60m"):
+                raw = provider.get_history_candlesticks(
+                    mapping.provider_symbol,
+                    period=period,
+                    start=history_start,
+                    end=history_end,
+                )
+                cache.save(
+                    instrument_id=instrument_id,
+                    provider="longbridge",
+                    provider_symbol=mapping.provider_symbol,
+                    data_type=DataType(period),
+                    raw=raw,
+                    request_start=int(
+                        datetime.combine(
+                            history_start, datetime.min.time(), tzinfo=SHANGHAI
+                        ).timestamp()
+                        * 1000
+                    ),
+                    request_end=int(
+                        datetime.combine(
+                            history_end, datetime.max.time(), tzinfo=SHANGHAI
+                        ).timestamp()
+                        * 1000
+                    ),
+                )
             bundle = service.build_bundle(
                 instrument_id,
                 as_of=as_of,
@@ -298,8 +380,19 @@ def main() -> int:
                 fallback_providers=("hithink",),
             )
             snapshot_path = store.save_bundle(bundle)
-            if bundle.preflight_status is PreflightStatus.BLOCKED or not provenance_ok(bundle):
+            ready = (
+                bundle.preflight_status is not PreflightStatus.BLOCKED
+                and len(bundle.risk_60m.system_bars) == expected_60m
+                and len(bundle.support_15m.system_bars) == expected_15m
+                and provenance_ok(bundle)
+            )
+            if not ready:
                 failures += 1
+                if (
+                    len(bundle.risk_60m.system_bars) < expected_60m
+                    or len(bundle.support_15m.system_bars) < expected_15m
+                ):
+                    current_bar_shortfalls.append(instrument_id)
             bundles[instrument_id] = bundle
             snapshot_paths[instrument_id] = snapshot_path
         except Exception:
@@ -339,6 +432,16 @@ def main() -> int:
     print(coverage)
     print(f"SNAPSHOT {'PASS' if group_replay else 'FAIL'} — {group_path}")
     print(f"REPORT {report_path}")
+    print(f"EXPECTED COMPLETED BARS — 15m={expected_15m}; 60m={expected_60m}")
+    if (
+        current_bar_shortfalls
+        and as_of.date() == datetime.now(SHANGHAI).date()
+        and within_live_readiness_window(as_of)
+    ):
+        print(
+            "TEMPORARY_PROVIDER_ERROR — completed live bars are not ready for "
+            + ",".join(sorted(set(current_bar_shortfalls)))
+        )
     return 0 if failures == 0 else 1
 
 

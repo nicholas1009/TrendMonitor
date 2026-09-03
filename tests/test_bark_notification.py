@@ -536,6 +536,37 @@ class DeliveryTests(unittest.TestCase):
             self.assertEqual(first["status"], NotificationStatus.SENT.value)
             self.assertEqual(second["status"], NotificationStatus.SKIPPED_DUPLICATE.value)
 
+    def test_same_terminal_runtime_failure_is_sent_only_once(self):
+        with TemporaryDirectory() as tmp:
+            deliveries = []
+            target = service(
+                Path(tmp),
+                transport=lambda *_: (
+                    deliveries.append(1) or BarkHttpResult(200, b'{"code":200}')
+                ),
+            )
+            record = {
+                "run_id": "first-failure",
+                "trading_date": "2026-09-01",
+                "period_end": "2026-09-01T15:00:00+08:00",
+                "execution_mode": "CATCH_UP",
+                "rules_versions": {"runtime": "intraday_runtime_v0.1"},
+                "error_summary": {
+                    "stage": "MARKET_15M_INTERNAL",
+                    "error_category": "PIPELINE_FAILED",
+                    "recoverable": False,
+                },
+            }
+
+            first = target.process_runtime_failure(record)
+            second = target.process_runtime_failure(
+                {**record, "run_id": "duplicate-failure"}
+            )
+
+            self.assertEqual(first["status"], NotificationStatus.SENT.value)
+            self.assertEqual(second["status"], NotificationStatus.SKIPPED_DUPLICATE.value)
+            self.assertEqual(len(deliveries), 1)
+
     def test_notification_dry_run(self):
         with TemporaryDirectory() as tmp:
             current, previous = make_source(broad=True), make_source(broad=False)

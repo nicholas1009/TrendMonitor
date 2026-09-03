@@ -17,6 +17,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from trend_monitor.providers.hithink import HithinkProvider  # noqa: E402
+from trend_monitor.registry import InstrumentRegistry  # noqa: E402
 from trend_monitor.notifications import (  # noqa: E402
     BarkAdapter,
     BarkConfig,
@@ -26,17 +27,20 @@ from trend_monitor.notifications import (  # noqa: E402
     NotificationStore,
 )
 from trend_monitor.runtime import (  # noqa: E402
+    AuctionRunner,
     RuntimeConfig,
     RuntimeRunner,
     RuntimeSnapshotReader,
     RuntimeStore,
     SubprocessMonitorPipeline,
     TradingCalendarStore,
+    resolve_auction_targets,
 )
 from trend_monitor.runtime.logging import dotenv_secret_values, runtime_logger  # noqa: E402
 
 
 SHANGHAI = ZoneInfo("Asia/Shanghai")
+LAUNCH_AGENT_LABEL = "com.trendmonitor.local.intraday"
 
 
 def parse_as_of(value: str | None) -> datetime:
@@ -55,6 +59,26 @@ def null_logger() -> logging.Logger:
     return logger
 
 
+def write_launchd_heartbeat() -> None:
+    """Record a secret-free observation before any Risk Runtime work starts."""
+
+    target = PROJECT_ROOT / "data" / "runtime" / "launchd_heartbeat.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema_version": 1,
+        "label": LAUNCH_AGENT_LABEL,
+        "observed_at": datetime.now().astimezone().isoformat(),
+        "pid": os.getpid(),
+        "parent_pid": os.getppid(),
+    }
+    temporary = target.with_suffix(".tmp")
+    temporary.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(target)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--as-of", help="ISO timestamp; naive values are interpreted as Asia/Shanghai")
@@ -62,11 +86,19 @@ def main() -> int:
     parser.add_argument("--no-network", action="store_true")
     parser.add_argument("--force", action="store_true")
     parser.add_argument(
+        "--auction-catch-up",
+        action="store_true",
+        help="operator-explicit post-window Auction Final collection",
+    )
+    parser.add_argument(
         "--notification-dry-run",
         action="store_true",
         help="evaluate and persist notification decisions without calling Bark",
     )
     args = parser.parse_args()
+    launched_by_launchd = os.environ.get("TREND_MONITOR_LAUNCHD") == "1"
+    if launched_by_launchd and not args.dry_run:
+        write_launchd_heartbeat()
     as_of = parse_as_of(args.as_of)
     config = RuntimeConfig.load(
         PROJECT_ROOT / "config" / "runtime_schedule.json", project_root=PROJECT_ROOT
@@ -94,7 +126,17 @@ def main() -> int:
         adapter=BarkAdapter(bark_config, policy_config),
         store=NotificationStore(PROJECT_ROOT / "data" / "notifications"),
     )
-    launched_by_launchd = os.environ.get("TREND_MONITOR_LAUNCHD") == "1"
+    registry = InstrumentRegistry.load(PROJECT_ROOT / "config" / "instruments.json")
+    auction_runner = AuctionRunner(
+        project_root=PROJECT_ROOT,
+        calendar=calendar,
+        store=store,
+        provider_factory=lambda: HithinkProvider(dotenv_path=str(PROJECT_ROOT / ".env")),
+        targets=resolve_auction_targets(registry),
+        notifier=notifier,
+        logger=logger,
+        lock_stale_seconds=int(config.raw["lock_stale_seconds"]),
+    )
     runner = RuntimeRunner(
         project_root=PROJECT_ROOT,
         config=config,
@@ -106,7 +148,7 @@ def main() -> int:
         invocation_metadata={
             "trigger_source": "LAUNCHD" if launched_by_launchd else "MANUAL",
             "launchd_label": (
-                "com.trendmonitor.local.intraday" if launched_by_launchd else None
+                LAUNCH_AGENT_LABEL if launched_by_launchd else None
             ),
             "process_pid": os.getpid(),
             "parent_pid": os.getppid(),
@@ -117,6 +159,23 @@ def main() -> int:
         },
         notifier=notifier,
     )
+    try:
+        auction_result = auction_runner.run(
+            as_of=as_of,
+            no_network=args.no_network or args.as_of is not None,
+            catch_up=args.auction_catch_up,
+            dry_run=args.dry_run,
+            notification_dry_run=args.notification_dry_run,
+        )
+    except Exception as exc:
+        logger.error(
+            "stage=AUCTION_RUNTIME status=FAILED category=%s",
+            type(exc).__name__,
+        )
+        auction_result = {
+            "status": "FAILED",
+            "failure_reason": "AUCTION_RUNTIME_ERROR",
+        }
     result = (
         runner.dry_run(as_of=as_of, no_network=args.no_network)
         if args.dry_run
@@ -127,9 +186,10 @@ def main() -> int:
             notification_dry_run=args.notification_dry_run,
         )
     )
+    result["auction"] = auction_result
     if not launched_by_launchd:
         print(json.dumps(result, ensure_ascii=False, indent=2))
-    failed = result.get("status") == "FAILED" or any(
+    failed = auction_result.get("status") == "FAILED" or result.get("status") == "FAILED" or any(
         item.get("status") == "FAILED" for item in result.get("results", [])
     )
     return 1 if failed else 0

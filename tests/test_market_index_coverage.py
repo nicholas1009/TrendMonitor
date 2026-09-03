@@ -25,6 +25,10 @@ from trend_monitor.risk_input import (
 )
 from trend_monitor.schemas import AssetType, PreflightStatus
 from tests.test_risk_input_assembly import result_for, source_records
+from scripts.verify_market_index_coverage import (
+    expected_completed_bars,
+    within_live_readiness_window,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -64,6 +68,19 @@ class MarketIndexCoverageTests(unittest.TestCase):
                 self.assertEqual(mapping.mapping_type, MappingType.EXACT)
                 self.assertEqual(mapping.confidence, MappingConfidence.HIGH)
                 self.assertEqual(mapping.status, MappingStatus.VERIFIED)
+
+    def test_live_refresh_uses_completed_period_counts_not_full_day_counts(self):
+        expected = {
+            "10:33:00": (4, 1),
+            "11:33:00": (8, 2),
+            "14:03:00": (12, 3),
+            "15:03:00": (16, 4),
+        }
+        for clock, counts in expected.items():
+            with self.subTest(clock=clock):
+                as_of = datetime.fromisoformat(f"2026-09-03T{clock}+08:00")
+                self.assertEqual(expected_completed_bars(as_of), counts)
+                self.assertTrue(within_live_readiness_window(as_of))
 
     def test_six_indexes_apply_existing_system_bar_and_field_contract(self):
         for instrument_id, symbol in NEW_INDEXES.items():

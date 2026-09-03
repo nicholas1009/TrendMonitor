@@ -12,6 +12,7 @@ from trend_monitor.runtime.acceptance import (
     acceptance_status,
     evaluate_live_slot,
     evaluate_restart,
+    evaluate_sleep_wake,
     load_manifest,
     parse_power_events,
     redact_payload,
@@ -95,6 +96,31 @@ class RuntimeLiveAcceptanceTests(unittest.TestCase):
         item["started_at"] = "2026-09-01T14:03:41+08:00"
         self.assertEqual(evaluate_restart([item], baseline=baseline, system=system)["status"], "PASS")
 
+    def test_failed_pipeline_still_verifies_post_restart_launchd_trigger(self):
+        baseline = {
+            "system": {
+                "boot_time": "2026-08-30T12:30:00+09:00",
+                "launchd": {"plist": {"sha256": "same", "mtime": "unchanged"}},
+            }
+        }
+        system = {
+            "boot_time": "2026-09-03T06:30:00+09:00",
+            "console_login_time": "2026-09-03T06:31:00+09:00",
+            "launchd": {
+                "loaded": True,
+                "last_exit_code": 0,
+                "plist": {"sha256": "same", "mtime": "unchanged"},
+            },
+        }
+        item = record(period="10:30", status="FAILED")
+        item["started_at"] = "2026-09-03T10:33:05+08:00"
+        item["completed_at"] = "2026-09-03T10:34:16+08:00"
+
+        result = evaluate_restart([item], baseline=baseline, system=system)
+
+        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(result["first_post_restart_run_status"], "FAILED")
+
     def test_power_event_parser_distinguishes_operator_sleep(self):
         text = (
             "2026-09-01 15:59:00 +0900 Sleep                Entering Sleep state due to 'Idle Sleep' Using AC\n"
@@ -103,6 +129,53 @@ class RuntimeLiveAcceptanceTests(unittest.TestCase):
         values = parse_power_events(text)
         self.assertEqual([item["event"] for item in values], ["SLEEP", "WAKE"])
         self.assertTrue(values[0]["operator_candidate"])
+
+    def test_catch_up_failure_without_matching_sleep_boundary_is_pending(self):
+        item = record(mode="CATCH_UP", status="FAILED")
+        item["extra"]["missed_completed_period"] = True
+        events = [
+            {
+                "event": "SLEEP",
+                "timestamp": "2026-08-30T17:49:14+09:00",
+                "operator_candidate": True,
+                "message": "earlier sleep",
+            },
+            {
+                "event": "WAKE",
+                "timestamp": "2026-08-30T18:14:58+09:00",
+                "operator_candidate": True,
+                "message": "earlier wake",
+            },
+        ]
+        result = evaluate_sleep_wake([item], events)
+        self.assertEqual(
+            (result["status"], result["reason"]),
+            ("PENDING", "NO_SLEEP_BOUNDARY_CATCH_UP_EVIDENCE"),
+        )
+
+    def test_catch_up_failure_after_matching_wake_is_failure(self):
+        item = record(mode="CATCH_UP", status="FAILED")
+        item["extra"]["missed_completed_period"] = True
+        item["started_at"] = "2026-09-01T11:00:00+08:00"
+        events = [
+            {
+                "event": "SLEEP",
+                "timestamp": "2026-09-01T10:00:00+08:00",
+                "operator_candidate": True,
+                "message": "test sleep",
+            },
+            {
+                "event": "WAKE",
+                "timestamp": "2026-09-01T10:45:00+08:00",
+                "operator_candidate": True,
+                "message": "test wake",
+            },
+        ]
+        result = evaluate_sleep_wake([item], events)
+        self.assertEqual(
+            (result["status"], result["reason"]),
+            ("FAIL", "LAUNCHD_CATCH_UP_FAILED"),
+        )
 
     def test_secret_redaction(self):
         secret = "do-not-store-this"

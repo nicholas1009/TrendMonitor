@@ -16,15 +16,33 @@ from .logging import redact_text
 
 
 class RuntimeStageError(RuntimeError):
-    def __init__(self, category: str, stage: str, message: str):
+    def __init__(
+        self,
+        category: str,
+        stage: str,
+        message: str,
+        *,
+        command: list[str] | None = None,
+        exit_code: int | None = None,
+        duration_seconds: float | None = None,
+        stdout_tail: str | None = None,
+        stderr_tail: str | None = None,
+    ):
         super().__init__(message)
         self.category = category
         self.stage = stage
         self.attempts = 1
+        self.command = tuple(command or ())
+        self.exit_code = exit_code
+        self.duration_seconds = duration_seconds
+        self.stdout_tail = stdout_tail
+        self.stderr_tail = stderr_tail
 
 
 def classify_stage_failure(text: str) -> str:
     upper = text.upper()
+    if "TEMPORARY_PROVIDER_ERROR" in upper:
+        return "TEMPORARY_PROVIDER_ERROR"
     deterministic = {
         "UNMAPPED": "INVALID_MAPPING",
         "UNSUPPORTED": "UNSUPPORTED",
@@ -88,9 +106,13 @@ class SubprocessMonitorPipeline:
 
             def run_stage() -> dict[str, Any]:
                 self.logger.info("stage=%s status=STARTED as_of=%s", name, as_of.isoformat())
+                command = [sys.executable, str(script)]
+                if name in {"MARKET_DATA_REFRESH", "RISK_INPUT_ASSEMBLY"}:
+                    command.extend(["--as-of", as_of.isoformat()])
+                stage_started = time.monotonic()
                 try:
                     completed = subprocess.run(
-                        [sys.executable, str(script)],
+                        command,
                         cwd=self.root,
                         capture_output=True,
                         text=True,
@@ -98,13 +120,62 @@ class SubprocessMonitorPipeline:
                         check=False,
                     )
                 except subprocess.TimeoutExpired as exc:
-                    raise RuntimeStageError("TIMEOUT", name, f"stage timeout: {name}") from exc
-                output = redact_text((completed.stdout or "") + "\n" + (completed.stderr or ""), self.secrets)
+                    duration = time.monotonic() - stage_started
+                    stdout = redact_text(str(exc.stdout or ""), self.secrets)[-2000:]
+                    stderr = redact_text(str(exc.stderr or ""), self.secrets)[-2000:]
+                    message = f"stage timeout after {duration:.3f}s: {name}"
+                    self.logger.error(
+                        "stage=%s status=FAILED category=TIMEOUT recoverable=true "
+                        "exit_code=None duration=%.3f error=%s",
+                        name,
+                        duration,
+                        message,
+                    )
+                    raise RuntimeStageError(
+                        "TIMEOUT",
+                        name,
+                        message,
+                        command=command,
+                        duration_seconds=duration,
+                        stdout_tail=stdout,
+                        stderr_tail=stderr,
+                    ) from exc
+                duration = time.monotonic() - stage_started
+                stdout = redact_text(completed.stdout or "", self.secrets)
+                stderr = redact_text(completed.stderr or "", self.secrets)
+                output = (stdout + "\n" + stderr).strip()
                 if completed.returncode != 0:
                     category = classify_stage_failure(output)
-                    raise RuntimeStageError(category, name, output[-4000:])
+                    recoverable = category in set(retry["retryable_categories"])
+                    summary = output[-4000:]
+                    self.logger.error(
+                        "stage=%s status=FAILED category=%s recoverable=%s "
+                        "exit_code=%s duration=%.3f error=%s",
+                        name,
+                        category,
+                        str(recoverable).lower(),
+                        completed.returncode,
+                        duration,
+                        summary[-1000:].replace("\n", " | "),
+                    )
+                    raise RuntimeStageError(
+                        category,
+                        name,
+                        summary,
+                        command=command,
+                        exit_code=completed.returncode,
+                        duration_seconds=duration,
+                        stdout_tail=stdout[-2000:],
+                        stderr_tail=stderr[-2000:],
+                    )
                 self.logger.info("stage=%s status=PASS output=%s", name, output[-2000:].replace("\n", " | "))
-                return {"stage": name, "status": "PASS", "returncode": 0}
+                return {
+                    "stage": name,
+                    "status": "PASS",
+                    "returncode": 0,
+                    "duration_seconds": duration,
+                    "command": command,
+                }
 
             result, attempts = retry_action(
                 run_stage,
@@ -211,8 +282,20 @@ def build_combined_result(source: dict[str, Any], *, scheduled_period: Any, gene
             "risk_light": risk.get("risk_light"),
             "risk_direction": risk.get("risk_direction"),
             "confidence": risk.get("confidence"),
+            "current_return": risk.get("current_return"),
+            "previous_return": risk.get("previous_return"),
+            "two_period_return": risk.get("two_period_return"),
+            "relative_return": risk.get("relative_return"),
+            "market_relationship": risk.get("market_relationship"),
+            "persistent_weakness": risk.get("persistent_weakness"),
+            "downside_shock": risk.get("downside_shock"),
+            "relative_weakness": risk.get("relative_weakness"),
+            "market_resonance": risk.get("market_resonance"),
+            "repair_state": risk.get("repair_state"),
+            "score_components": risk.get("score_components"),
             "15m_classification": internal.get("classification"),
             "15m_direction_sequence": internal.get("direction_sequence"),
+            "15m_joint_market_flags": internal.get("joint_market_flags"),
         }
     lookahead = all(source["source_safety"].values())
     lookahead = lookahead and bool(market15.get("data_quality", {}).get("lookahead_safe"))
@@ -246,6 +329,15 @@ def build_combined_result(source: dict[str, Any], *, scheduled_period: Any, gene
             "risk_direction": market.get("risk_direction"),
             "confidence": market.get("signal_confidence"),
             "breadth": market.get("breadth"),
+            "persistent_weakness": market.get("persistent_weakness"),
+            "downside_shocks": market.get("downside_shocks"),
+            "weighted_support_distortion": market.get("weighted_support_distortion"),
+            "small_cap_stress": market.get("small_cap_stress"),
+            "broad_selloff_resonance": market.get("broad_selloff_resonance"),
+            "strong_broad_weakness": market.get("strong_broad_weakness"),
+            "broad_repair": market.get("broad_repair"),
+            "repair_count": market.get("repair_count"),
+            "score_components": market.get("score_components"),
             "15m_internal": market15.get("market_internal_state"),
         },
         "stocks": stocks,
@@ -276,6 +368,9 @@ def render_combined_report(value: dict[str, Any]) -> str:
         "## 大盘",
         "",
         f"Risk Light：{market['risk_light']} / Score {market['risk_score']} / {market['risk_direction']}",
+        f"Score Components：{market['score_components']}",
+        f"Persistent / Shock：{market['persistent_weakness']} / {market['downside_shocks']}",
+        f"Breadth Selloff / Broad Repair：{market['broad_selloff_resonance']} / {market['broad_repair']}",
         f"15m Internal：{market['15m_internal']}",
     ]
     for instrument_id, stock in value["stocks"].items():
@@ -285,7 +380,11 @@ def render_combined_report(value: dict[str, Any]) -> str:
                 f"## {stock['name'] or instrument_id}",
                 "",
                 f"Risk Light：{stock['risk_light']} / Score {stock['risk_score']}",
+                f"Score Components：{stock['score_components']}",
+                f"Return / Relative：{stock['current_return']} / {stock['relative_return']}",
+                f"Market Relationship / Resonance：{stock['market_relationship']} / {stock['market_resonance']}",
                 f"15m：{stock['15m_classification']}",
+                f"15m Joint Flags：{stock['15m_joint_market_flags']}",
             ]
         )
     lines.extend(

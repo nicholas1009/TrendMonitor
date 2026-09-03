@@ -52,6 +52,11 @@ launchd路径，不建立日志或生产Snapshot。`--no-network`只读取已有
 launchd使用`StartInterval=60`唤醒轻量Runner，再由Runner用`Asia/Shanghai`解析边界。这样
 不会把Mac的Asia/Tokyo时钟硬编码为A股时钟，也能在Wake/Resume后立即执行Missed Period扫描。
 
+这是User LaunchAgent：只有用户GUI Session存在时才会运行。Mac处于唤醒状态并不等同于用户
+已登录；注销用户后，即使系统没有Sleep，`gui/<uid>`中的Agent也不会覆盖后续周期。东京时区
+主机上的四个默认触发分别是11:33、12:33、15:03、16:03 JST（对应10:33、11:33、
+14:03、15:03 Asia/Shanghai）。
+
 ## Trading Day Gate
 
 Runner使用Hithink正式`/api/a-share/calendar/trading-days`，本地保存脱敏Calendar Snapshot：
@@ -122,6 +127,13 @@ RATE_LIMIT
 
 Mapping、Unsupported、Permission/Auth、Schema/Contract错误不重试。Provider Fallback继续由现有
 `MarketDataService`处理，Scheduler没有复制Provider选择逻辑。
+
+对于相同的`trading_date + period_end + rules_versions`，一旦Manifest已有
+`FAILED / recoverable=false`，该周期进入`TERMINAL_FAILED`。普通自动Tick返回
+`SKIPPED_TERMINAL_FAILURE`、稳定的`TERMINAL_FAILED|<idempotency_key>` skip key和
+`NON_RECOVERABLE_FAILURE_ALREADY_RECORDED`，不再调用Pipeline，且正常以exit code 0结束。
+历史上尚未写入idempotency key的Failure会从其period与rules_versions重建身份。只有显式
+Operator `--force`允许重新执行Terminal Failure；`recoverable=true`不被这个门禁误阻断。
 
 ## Catch-up / Wake Recovery
 
@@ -216,6 +228,16 @@ uv run python scripts/check_runtime_health.py
 当前结果`PASS`：项目路径、uv/Python、`.env`、0600权限、Longbridge/Hithink凭证存在性、Raw
 Cache、Snapshot、Runtime、Logs可写、Calendar、launchd模板/安装、最近成功Run、Lock正常释放
 及磁盘空间均通过。Health只输出`PRESENT/MISSING`，不打印Credential值。
+
+Health Check同时核对已安装plist、当前GUI domain loaded状态、disabled状态、last exit code、
+run interval、WorkingDirectory、Program路径、Runtime日志可写性，以及最近一次launchd heartbeat
+和Runtime Manifest中的Launchd观察。plist存在但未加载会明确返回
+`LAUNCH_AGENT_NOT_LOADED`。
+
+Restart Recovery只能通过真实重启验证：先记录当前Boot与plist hash/mtime，重启并登录用户，
+不要运行install/bootstrap/kickstart，等待两个StartInterval，再运行Health Check。只有新Boot后的
+GUI domain自动loaded、plist未变化且heartbeat晚于本次登录，才可记录`RESTART_RECOVERY = VERIFIED`。
+此前只能记录`IMPLEMENTED_PENDING_RESTART_TEST`。
 
 ## Tests / Regression
 
