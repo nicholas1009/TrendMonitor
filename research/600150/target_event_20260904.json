@@ -1,0 +1,78 @@
+{
+  "above_ma10": 1,
+  "above_ma20": 1,
+  "above_ma250": 1,
+  "above_ma60": 1,
+  "atr14_sma": 0.9807142857142855,
+  "breakout_20": 1,
+  "breakout_40": 0,
+  "breakout_60": 0,
+  "breakout_distance_20_atr": 2.1616897305171134,
+  "breakout_distance_40_atr": -0.8055353241077924,
+  "breakout_distance_60_atr": -0.8055353241077924,
+  "breakout_signature": "100",
+  "close": 37.47,
+  "close_location": 0.9138461538461535,
+  "date": "2026-09-04",
+  "day_return": 0.09178321678321666,
+  "distance_ma250_atr": 2.1322010196649654,
+  "entry_ma_cross": {
+    "reason": "No reliable moving-average pair was found in repository evidence.",
+    "status": "UNKNOWN"
+  },
+  "event_role": "TARGET_EVENT_NOT_USED_FOR_FITTING",
+  "feature_contract": {
+    "atr14_sma": "SMA of 14 causal True Range values, inclusive of T0",
+    "breakout": "T0 Daily Close strictly above the prior-N Daily High",
+    "ma_slope": "T0 moving average minus prior trading day's moving average",
+    "moving_averages": "close-only causal rolling means, inclusive of T0",
+    "prior_highs": "maximum Daily High over prior N trading days, excluding T0",
+    "volume_ratio_20": "T0 Longbridge volume divided by prior 20D Longbridge average; no cross-provider unit conversion"
+  },
+  "formal_range": {
+    "end": "2026-09-04",
+    "start": "2023-09-01",
+    "trading_days": 715
+  },
+  "gap": 0.005244755244755206,
+  "high": 37.75,
+  "low": 34.5,
+  "ma10": 34.528,
+  "ma10_slope": 0.3789999999999978,
+  "ma10_slope_atr": 0.3864530225782935,
+  "ma20": 34.106,
+  "ma20_slope": 0.13100000000000023,
+  "ma20_slope_atr": 0.1335761107064824,
+  "ma250": 35.37892,
+  "ma250_slope": 0.0001600000000010482,
+  "ma250_slope_atr": 0.00016314639475707758,
+  "ma60": 34.618,
+  "ma60_slope": 0.05033333333333445,
+  "ma60_slope_atr": 0.05132313668366223,
+  "market_context": {
+    "14:00": {
+      "execution_mode": "CATCH_UP",
+      "risk_light": "ORANGE",
+      "risk_score": 5
+    },
+    "15:00": {
+      "execution_mode": "CATCH_UP",
+      "risk_light": "ORANGE",
+      "risk_score": 5
+    }
+  },
+  "open": 34.5,
+  "prev_close": 34.32,
+  "price_vs_ma10": 0.08520620945319735,
+  "price_vs_ma20": 0.09863367149475155,
+  "price_vs_ma250": 0.059105252506294725,
+  "price_vs_ma60": 0.08238488647524389,
+  "prior20_high": 35.35,
+  "prior40_high": 38.26,
+  "prior60_high": 38.26,
+  "range_atr": 3.313911143481428,
+  "true_range": 3.4299999999999997,
+  "turnover": 12392923871.0,
+  "volume": 3377447,
+  "volume_ratio_20": 4.76311437118676
+}

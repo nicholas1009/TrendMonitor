@@ -1,0 +1,73 @@
+{
+  "hithink_field_semantics": {
+    "auction_price": "竞价价格",
+    "open_price": "开盘价"
+  },
+  "limitation": "Only five date-bound live/catch-up samples across three symbols.",
+  "longbridge_field": "daily_open",
+  "sample_size": 5,
+  "samples": [
+    {
+      "auction_difference": 0.0,
+      "auction_raw_path": "data/raw/hithink/auction/2026-09-03/20260903T130348.907445Z__auction.final_snapshot__600487.SH_002463.SZ__auction__src-na-na__4dcf39ac.json",
+      "daily_open": "67.77",
+      "hithink_field_name": "auction_price",
+      "hithink_open_price": 67.77,
+      "hithink_value": 67.77,
+      "open_field_difference": 0.0,
+      "semantic_status": "CONFIRMED_FIELDS_DATE_BOUND_SAMPLE",
+      "symbol": "600487.SH",
+      "trade_date": "2026-09-03"
+    },
+    {
+      "auction_difference": 0.0,
+      "auction_raw_path": "data/raw/hithink/auction/2026-09-03/20260903T130348.907445Z__auction.final_snapshot__600487.SH_002463.SZ__auction__src-na-na__4dcf39ac.json",
+      "daily_open": "120.40",
+      "hithink_field_name": "auction_price",
+      "hithink_open_price": 120.4,
+      "hithink_value": 120.4,
+      "open_field_difference": 0.0,
+      "semantic_status": "CONFIRMED_FIELDS_DATE_BOUND_SAMPLE",
+      "symbol": "002463.SZ",
+      "trade_date": "2026-09-03"
+    },
+    {
+      "auction_difference": 0.0,
+      "auction_raw_path": "data/raw/hithink/auction/2026-09-04/20260904T101729.026758Z__auction.final_snapshot__600487.SH_002463.SZ__auction__src-na-na__6209614d.json",
+      "daily_open": "65.70",
+      "hithink_field_name": "auction_price",
+      "hithink_open_price": 65.7,
+      "hithink_value": 65.7,
+      "open_field_difference": 0.0,
+      "semantic_status": "CONFIRMED_FIELDS_DATE_BOUND_SAMPLE",
+      "symbol": "600487.SH",
+      "trade_date": "2026-09-04"
+    },
+    {
+      "auction_difference": 0.0,
+      "auction_raw_path": "data/raw/hithink/auction/2026-09-04/20260904T101729.026758Z__auction.final_snapshot__600487.SH_002463.SZ__auction__src-na-na__6209614d.json",
+      "daily_open": "118.00",
+      "hithink_field_name": "auction_price",
+      "hithink_open_price": 118.0,
+      "hithink_value": 118.0,
+      "open_field_difference": 0.0,
+      "semantic_status": "CONFIRMED_FIELDS_DATE_BOUND_SAMPLE",
+      "symbol": "002463.SZ",
+      "trade_date": "2026-09-04"
+    },
+    {
+      "auction_difference": 0.0,
+      "auction_raw_path": "research/600150/raw/hithink_capability_audit.json",
+      "daily_open": 34.5,
+      "hithink_field_name": "auction_price",
+      "hithink_open_price": 34.5,
+      "hithink_value": 34.5,
+      "open_field_difference": 0.0,
+      "semantic_status": "CONFIRMED_FIELDS_SAME_SHANGHAI_TRADING_DATE",
+      "symbol": "600150.SH",
+      "trade_date": "2026-09-04"
+    }
+  ],
+  "schema_version": 1,
+  "status": "PROVISIONAL_CONFIRMED"
+}

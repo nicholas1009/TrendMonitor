@@ -1,0 +1,220 @@
+{
+  "price_and_date_status": "PASS",
+  "rows": [
+    {
+      "date": "2026-08-31",
+      "hithink_volume": 88833272,
+      "longbridge_volume": 888333,
+      "price_differences": {
+        "close": 0.0,
+        "high": 0.0,
+        "low": 0.0,
+        "open": 0.0
+      },
+      "raw_volume_ratio_hithink_to_longbridge": 99.99996848028836,
+      "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+      "turnover_difference": 0.05000019073486328
+    },
+    {
+      "date": "2026-09-01",
+      "hithink_volume": 81637693,
+      "longbridge_volume": 816377,
+      "price_differences": {
+        "close": 0.0,
+        "high": 0.0,
+        "low": 0.0,
+        "open": 0.0
+      },
+      "raw_volume_ratio_hithink_to_longbridge": 99.99999142553011,
+      "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+      "turnover_difference": -0.46000003814697266
+    },
+    {
+      "date": "2026-09-02",
+      "hithink_volume": 71015661,
+      "longbridge_volume": 710157,
+      "price_differences": {
+        "close": 0.0,
+        "high": 0.0,
+        "low": 0.0,
+        "open": 0.0
+      },
+      "raw_volume_ratio_hithink_to_longbridge": 99.99994508256626,
+      "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+      "turnover_difference": 0.23999977111816406
+    },
+    {
+      "date": "2026-09-03",
+      "hithink_volume": 100789965,
+      "longbridge_volume": 1007900,
+      "price_differences": {
+        "close": 0.0,
+        "high": 0.0,
+        "low": 0.0,
+        "open": 0.0
+      },
+      "raw_volume_ratio_hithink_to_longbridge": 99.99996527433277,
+      "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+      "turnover_difference": -0.010000228881835938
+    },
+    {
+      "date": "2026-09-04",
+      "hithink_volume": 337744691,
+      "longbridge_volume": 3377447,
+      "price_differences": {
+        "close": 0.0,
+        "high": 0.0,
+        "low": 0.0,
+        "open": 0.0
+      },
+      "raw_volume_ratio_hithink_to_longbridge": 99.99999733526536,
+      "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+      "turnover_difference": 0.15999984741210938
+    },
+    {
+      "date": "2023-11-30",
+      "hithink_volume": 85024877,
+      "longbridge_volume": 850249,
+      "price_differences": {
+        "close": 0.0,
+        "high": 0.0,
+        "low": 0.0,
+        "open": 0.0
+      },
+      "raw_volume_ratio_hithink_to_longbridge": 99.9999729491008,
+      "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+      "turnover_difference": 0.019999980926513672
+    },
+    {
+      "date": "2024-09-30",
+      "hithink_volume": 130829351,
+      "longbridge_volume": 1308294,
+      "price_differences": {
+        "close": 0.0,
+        "high": 0.0,
+        "low": 0.0,
+        "open": 0.0
+      },
+      "raw_volume_ratio_hithink_to_longbridge": 99.99996254664471,
+      "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+      "turnover_difference": 0.3400001525878906
+    },
+    {
+      "date": "2026-04-23",
+      "hithink_volume": 241955281,
+      "longbridge_volume": 2419553,
+      "price_differences": {
+        "close": 0.0,
+        "high": 0.0,
+        "low": 0.0,
+        "open": 0.0
+      },
+      "raw_volume_ratio_hithink_to_longbridge": 99.99999214730985,
+      "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+      "turnover_difference": -0.1900005340576172
+    },
+    {
+      "date": "2024-10-08",
+      "hithink_volume": 151202120.0,
+      "longbridge_volume": 1512021,
+      "price_differences": {
+        "close": 0.0,
+        "high": 0.0,
+        "low": 0.0,
+        "open": 0.0
+      },
+      "raw_volume_ratio_hithink_to_longbridge": 100.00001322732952,
+      "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+      "turnover_difference": 0.4099998474121094
+    },
+    {
+      "date": "2026-04-20",
+      "hithink_volume": 179660138,
+      "longbridge_volume": 1796601,
+      "price_differences": {
+        "close": 0.0,
+        "high": 0.0,
+        "low": 0.0,
+        "open": 0.0
+      },
+      "raw_volume_ratio_hithink_to_longbridge": 100.00002115105134,
+      "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+      "turnover_difference": -0.18000030517578125
+    },
+    {
+      "date": "2025-06-26",
+      "hithink_volume": 70178450.0,
+      "longbridge_volume": 701785,
+      "price_differences": {
+        "close": 0.0,
+        "high": 0.0,
+        "low": 0.0,
+        "open": 0.0
+      },
+      "raw_volume_ratio_hithink_to_longbridge": 99.99992875310815,
+      "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+      "turnover_difference": 0.42999982833862305
+    },
+    {
+      "date": "2026-04-21",
+      "hithink_volume": 149408849,
+      "longbridge_volume": 1494088,
+      "price_differences": {
+        "close": 0.0,
+        "high": 0.0,
+        "low": 0.0,
+        "open": 0.0
+      },
+      "raw_volume_ratio_hithink_to_longbridge": 100.00003279592634,
+      "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+      "turnover_difference": -0.35000038146972656
+    },
+    {
+      "date": "2025-06-30",
+      "hithink_volume": 60746724,
+      "longbridge_volume": 607467,
+      "price_differences": {
+        "close": 0.0,
+        "high": 0.0,
+        "low": 0.0,
+        "open": 0.0
+      },
+      "raw_volume_ratio_hithink_to_longbridge": 100.00003950831898,
+      "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+      "turnover_difference": 0.1400001049041748
+    },
+    {
+      "date": "2023-11-20",
+      "hithink_volume": 61015723,
+      "longbridge_volume": 610157,
+      "price_differences": {
+        "close": 0.0,
+        "high": 0.0,
+        "low": 0.0,
+        "open": 0.0
+      },
+      "raw_volume_ratio_hithink_to_longbridge": 100.00003769521615,
+      "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+      "turnover_difference": 0.40000009536743164
+    },
+    {
+      "date": "2025-06-25",
+      "hithink_volume": 48552309,
+      "longbridge_volume": 485523,
+      "price_differences": {
+        "close": 0.0,
+        "high": 0.0,
+        "low": 0.0,
+        "open": 0.0
+      },
+      "raw_volume_ratio_hithink_to_longbridge": 100.00001853671196,
+      "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+      "turnover_difference": 0.08999991416931152
+    }
+  ],
+  "sample_size": 15,
+  "schema_version": 1,
+  "status": "DATA_CONFLICT",
+  "volume_handling": "No conversion applied; formal feature uses only Longbridge within-source ratio.",
+  "volume_status": "UNIT_SEMANTICS_UNRESOLVED"
+}

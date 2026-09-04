@@ -1,0 +1,169 @@
+{
+  "actions": [
+    "ADD",
+    "HOLD",
+    "DEFENSIVE",
+    "NO_SIGNAL"
+  ],
+  "add_execution_policy": {
+    "add_qualification": "YES only when matched scenario decision is ADD",
+    "execute_at_auction": "NO",
+    "provisional_experiment_increment_shares": 100,
+    "reason": "Daily Open bridge is provisional and no executable post-open window has been validated.",
+    "target_position_size": "UNKNOWN"
+  },
+  "auction_market_time": "09:25 Asia/Shanghai",
+  "auction_open_bridge_required": "PROVISIONAL_CONFIRMED",
+  "calendar_gate": "current trade date must be present in Hithink authoritative trading-days response",
+  "data_not_ready_action": "NO_DECISION",
+  "gap_buckets": {
+    "HIGH_OPEN": {
+      "min_inclusive": 0.001536570374923274
+    },
+    "LOW_OPEN": {
+      "max_inclusive": -0.0031735956839099577
+    },
+    "NEUTRAL_OPEN": {
+      "max_exclusive": 0.001536570374923274,
+      "min_exclusive": -0.0031735956839099577
+    }
+  },
+  "historical_proxy_field": "daily_open",
+  "mode": "READ_ONLY_SHADOW",
+  "objective": "PRECISION_FIRST",
+  "playbook_version": "opening_playbook_v0.1",
+  "required_auction_state": {
+    "auction_phase": "closed",
+    "data_status": "final"
+  },
+  "scenarios": {
+    "HIGH_OPEN": {
+      "calibration": {
+        "false_break_close_5d_rate": 0.3333333333333333,
+        "false_break_price_5d_rate": 0.6666666666666666,
+        "median_mae_5d": -0.04390243902439017,
+        "median_mfe_5d": 0.03872157344806393,
+        "sample_size": 3,
+        "t1_average_return": 0.01692521317507271,
+        "t1_median_return": 0.024277811923786086,
+        "t1_positive_rate": 0.6666666666666666,
+        "t3_average_return": 0.005995755157768734,
+        "t3_median_return": 0.008618625807996105,
+        "t3_positive_rate": 0.6666666666666666,
+        "t5_average_return": -0.010067599549961948,
+        "t5_median_return": -0.024390243902438935,
+        "t5_positive_rate": 0.3333333333333333,
+        "worst_mae_5d": -0.04716303567153468
+      },
+      "decision": {
+        "action": "NO_SIGNAL",
+        "reason": "requires at least 5 rows in each segment",
+        "status": "SAMPLE_THIN"
+      },
+      "validation": {
+        "false_break_close_5d_rate": 0.0,
+        "false_break_price_5d_rate": 0.0,
+        "median_mae_5d": 0.0045351473922901064,
+        "median_mfe_5d": 0.11394557823129237,
+        "sample_size": 1,
+        "t1_average_return": 0.02947845804988658,
+        "t1_median_return": 0.02947845804988658,
+        "t1_positive_rate": 1.0,
+        "t3_average_return": 0.0941043083900226,
+        "t3_median_return": 0.0941043083900226,
+        "t3_positive_rate": 1.0,
+        "t5_average_return": 0.08871882086167782,
+        "t5_median_return": 0.08871882086167782,
+        "t5_positive_rate": 1.0,
+        "worst_mae_5d": 0.0045351473922901064
+      }
+    },
+    "LOW_OPEN": {
+      "calibration": {
+        "false_break_close_5d_rate": 0.3333333333333333,
+        "false_break_price_5d_rate": 0.6666666666666666,
+        "median_mae_5d": -0.013024602026049159,
+        "median_mfe_5d": 0.02315484804630974,
+        "sample_size": 3,
+        "t1_average_return": -0.023068854223895707,
+        "t1_median_return": -0.0021707670043416005,
+        "t1_positive_rate": 0.3333333333333333,
+        "t3_average_return": -0.013466154752288887,
+        "t3_median_return": -0.007959479015918869,
+        "t3_positive_rate": 0.3333333333333333,
+        "t5_average_return": -0.009491660499086082,
+        "t5_median_return": 0.012662807525325448,
+        "t5_positive_rate": 0.6666666666666666,
+        "worst_mae_5d": -0.0921478060046188
+      },
+      "decision": {
+        "action": "NO_SIGNAL",
+        "reason": "requires at least 5 rows in each segment",
+        "status": "SAMPLE_THIN"
+      },
+      "validation": {
+        "false_break_close_5d_rate": 0.0,
+        "false_break_price_5d_rate": 0.0,
+        "median_mae_5d": -0.011563876651982441,
+        "median_mfe_5d": 0.1555616740088106,
+        "sample_size": 1,
+        "t1_average_return": 0.004405286343612147,
+        "t1_median_return": 0.004405286343612147,
+        "t1_positive_rate": 1.0,
+        "t3_average_return": 0.06828193832599116,
+        "t3_median_return": 0.06828193832599116,
+        "t3_positive_rate": 1.0,
+        "t5_average_return": 0.13766519823788537,
+        "t5_median_return": 0.13766519823788537,
+        "t5_positive_rate": 1.0,
+        "worst_mae_5d": -0.011563876651982441
+      }
+    },
+    "NEUTRAL_OPEN": {
+      "calibration": {
+        "false_break_close_5d_rate": 0.0,
+        "false_break_price_5d_rate": 0.0,
+        "median_mae_5d": -0.005364468286525814,
+        "median_mfe_5d": 0.06658251814452498,
+        "sample_size": 1,
+        "t1_average_return": 0.004102240454401995,
+        "t1_median_return": 0.004102240454401995,
+        "t1_positive_rate": 1.0,
+        "t3_average_return": 0.05175134111707158,
+        "t3_median_return": 0.05175134111707158,
+        "t3_positive_rate": 1.0,
+        "t5_average_return": 0.049542442410855037,
+        "t5_median_return": 0.049542442410855037,
+        "t5_positive_rate": 1.0,
+        "worst_mae_5d": -0.005364468286525814
+      },
+      "decision": {
+        "action": "NO_SIGNAL",
+        "reason": "requires at least 5 rows in each segment",
+        "status": "SAMPLE_THIN"
+      },
+      "validation": {
+        "false_break_close_5d_rate": 0.5,
+        "false_break_price_5d_rate": 0.5,
+        "median_mae_5d": -0.01885999730655008,
+        "median_mfe_5d": 0.06653920032888438,
+        "sample_size": 2,
+        "t1_average_return": 0.0035482659143907247,
+        "t1_median_return": 0.0035482659143907247,
+        "t1_positive_rate": 1.0,
+        "t3_average_return": 0.028256416435715137,
+        "t3_median_return": 0.028256416435715137,
+        "t3_positive_rate": 0.5,
+        "t5_average_return": 0.0392910556197415,
+        "t5_median_return": 0.0392910556197415,
+        "t5_positive_rate": 0.5,
+        "worst_mae_5d": -0.022435020519835813
+      }
+    }
+  },
+  "schema_version": 1,
+  "symbol": "600150.SH",
+  "target_event_close": 37.47,
+  "target_trade_date": null,
+  "target_trade_date_status": "UNKNOWN_PENDING_HITHINK_CALENDAR"
+}

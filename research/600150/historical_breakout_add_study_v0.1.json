@@ -1,0 +1,692 @@
+{
+  "analysis_cutoff": "2026-09-04",
+  "auction_open_bridge": {
+    "hithink_field_semantics": {
+      "auction_price": "竞价价格",
+      "open_price": "开盘价"
+    },
+    "limitation": "Only five date-bound live/catch-up samples across three symbols.",
+    "longbridge_field": "daily_open",
+    "sample_size": 5,
+    "samples": [
+      {
+        "auction_difference": 0.0,
+        "auction_raw_path": "data/raw/hithink/auction/2026-09-03/20260903T130348.907445Z__auction.final_snapshot__600487.SH_002463.SZ__auction__src-na-na__4dcf39ac.json",
+        "daily_open": "67.77",
+        "hithink_field_name": "auction_price",
+        "hithink_open_price": 67.77,
+        "hithink_value": 67.77,
+        "open_field_difference": 0.0,
+        "semantic_status": "CONFIRMED_FIELDS_DATE_BOUND_SAMPLE",
+        "symbol": "600487.SH",
+        "trade_date": "2026-09-03"
+      },
+      {
+        "auction_difference": 0.0,
+        "auction_raw_path": "data/raw/hithink/auction/2026-09-03/20260903T130348.907445Z__auction.final_snapshot__600487.SH_002463.SZ__auction__src-na-na__4dcf39ac.json",
+        "daily_open": "120.40",
+        "hithink_field_name": "auction_price",
+        "hithink_open_price": 120.4,
+        "hithink_value": 120.4,
+        "open_field_difference": 0.0,
+        "semantic_status": "CONFIRMED_FIELDS_DATE_BOUND_SAMPLE",
+        "symbol": "002463.SZ",
+        "trade_date": "2026-09-03"
+      },
+      {
+        "auction_difference": 0.0,
+        "auction_raw_path": "data/raw/hithink/auction/2026-09-04/20260904T101729.026758Z__auction.final_snapshot__600487.SH_002463.SZ__auction__src-na-na__6209614d.json",
+        "daily_open": "65.70",
+        "hithink_field_name": "auction_price",
+        "hithink_open_price": 65.7,
+        "hithink_value": 65.7,
+        "open_field_difference": 0.0,
+        "semantic_status": "CONFIRMED_FIELDS_DATE_BOUND_SAMPLE",
+        "symbol": "600487.SH",
+        "trade_date": "2026-09-04"
+      },
+      {
+        "auction_difference": 0.0,
+        "auction_raw_path": "data/raw/hithink/auction/2026-09-04/20260904T101729.026758Z__auction.final_snapshot__600487.SH_002463.SZ__auction__src-na-na__6209614d.json",
+        "daily_open": "118.00",
+        "hithink_field_name": "auction_price",
+        "hithink_open_price": 118.0,
+        "hithink_value": 118.0,
+        "open_field_difference": 0.0,
+        "semantic_status": "CONFIRMED_FIELDS_DATE_BOUND_SAMPLE",
+        "symbol": "002463.SZ",
+        "trade_date": "2026-09-04"
+      },
+      {
+        "auction_difference": 0.0,
+        "auction_raw_path": "research/600150/raw/hithink_capability_audit.json",
+        "daily_open": 34.5,
+        "hithink_field_name": "auction_price",
+        "hithink_open_price": 34.5,
+        "hithink_value": 34.5,
+        "open_field_difference": 0.0,
+        "semantic_status": "CONFIRMED_FIELDS_SAME_SHANGHAI_TRADING_DATE",
+        "symbol": "600150.SH",
+        "trade_date": "2026-09-04"
+      }
+    ],
+    "schema_version": 1,
+    "status": "PROVISIONAL_CONFIRMED"
+  },
+  "daily_cross_validation": {
+    "price_and_date_status": "PASS",
+    "rows": [
+      {
+        "date": "2026-08-31",
+        "hithink_volume": 88833272,
+        "longbridge_volume": 888333,
+        "price_differences": {
+          "close": 0.0,
+          "high": 0.0,
+          "low": 0.0,
+          "open": 0.0
+        },
+        "raw_volume_ratio_hithink_to_longbridge": 99.99996848028836,
+        "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+        "turnover_difference": 0.05000019073486328
+      },
+      {
+        "date": "2026-09-01",
+        "hithink_volume": 81637693,
+        "longbridge_volume": 816377,
+        "price_differences": {
+          "close": 0.0,
+          "high": 0.0,
+          "low": 0.0,
+          "open": 0.0
+        },
+        "raw_volume_ratio_hithink_to_longbridge": 99.99999142553011,
+        "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+        "turnover_difference": -0.46000003814697266
+      },
+      {
+        "date": "2026-09-02",
+        "hithink_volume": 71015661,
+        "longbridge_volume": 710157,
+        "price_differences": {
+          "close": 0.0,
+          "high": 0.0,
+          "low": 0.0,
+          "open": 0.0
+        },
+        "raw_volume_ratio_hithink_to_longbridge": 99.99994508256626,
+        "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+        "turnover_difference": 0.23999977111816406
+      },
+      {
+        "date": "2026-09-03",
+        "hithink_volume": 100789965,
+        "longbridge_volume": 1007900,
+        "price_differences": {
+          "close": 0.0,
+          "high": 0.0,
+          "low": 0.0,
+          "open": 0.0
+        },
+        "raw_volume_ratio_hithink_to_longbridge": 99.99996527433277,
+        "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+        "turnover_difference": -0.010000228881835938
+      },
+      {
+        "date": "2026-09-04",
+        "hithink_volume": 337744691,
+        "longbridge_volume": 3377447,
+        "price_differences": {
+          "close": 0.0,
+          "high": 0.0,
+          "low": 0.0,
+          "open": 0.0
+        },
+        "raw_volume_ratio_hithink_to_longbridge": 99.99999733526536,
+        "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+        "turnover_difference": 0.15999984741210938
+      },
+      {
+        "date": "2023-11-30",
+        "hithink_volume": 85024877,
+        "longbridge_volume": 850249,
+        "price_differences": {
+          "close": 0.0,
+          "high": 0.0,
+          "low": 0.0,
+          "open": 0.0
+        },
+        "raw_volume_ratio_hithink_to_longbridge": 99.9999729491008,
+        "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+        "turnover_difference": 0.019999980926513672
+      },
+      {
+        "date": "2024-09-30",
+        "hithink_volume": 130829351,
+        "longbridge_volume": 1308294,
+        "price_differences": {
+          "close": 0.0,
+          "high": 0.0,
+          "low": 0.0,
+          "open": 0.0
+        },
+        "raw_volume_ratio_hithink_to_longbridge": 99.99996254664471,
+        "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+        "turnover_difference": 0.3400001525878906
+      },
+      {
+        "date": "2026-04-23",
+        "hithink_volume": 241955281,
+        "longbridge_volume": 2419553,
+        "price_differences": {
+          "close": 0.0,
+          "high": 0.0,
+          "low": 0.0,
+          "open": 0.0
+        },
+        "raw_volume_ratio_hithink_to_longbridge": 99.99999214730985,
+        "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+        "turnover_difference": -0.1900005340576172
+      },
+      {
+        "date": "2024-10-08",
+        "hithink_volume": 151202120.0,
+        "longbridge_volume": 1512021,
+        "price_differences": {
+          "close": 0.0,
+          "high": 0.0,
+          "low": 0.0,
+          "open": 0.0
+        },
+        "raw_volume_ratio_hithink_to_longbridge": 100.00001322732952,
+        "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+        "turnover_difference": 0.4099998474121094
+      },
+      {
+        "date": "2026-04-20",
+        "hithink_volume": 179660138,
+        "longbridge_volume": 1796601,
+        "price_differences": {
+          "close": 0.0,
+          "high": 0.0,
+          "low": 0.0,
+          "open": 0.0
+        },
+        "raw_volume_ratio_hithink_to_longbridge": 100.00002115105134,
+        "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+        "turnover_difference": -0.18000030517578125
+      },
+      {
+        "date": "2025-06-26",
+        "hithink_volume": 70178450.0,
+        "longbridge_volume": 701785,
+        "price_differences": {
+          "close": 0.0,
+          "high": 0.0,
+          "low": 0.0,
+          "open": 0.0
+        },
+        "raw_volume_ratio_hithink_to_longbridge": 99.99992875310815,
+        "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+        "turnover_difference": 0.42999982833862305
+      },
+      {
+        "date": "2026-04-21",
+        "hithink_volume": 149408849,
+        "longbridge_volume": 1494088,
+        "price_differences": {
+          "close": 0.0,
+          "high": 0.0,
+          "low": 0.0,
+          "open": 0.0
+        },
+        "raw_volume_ratio_hithink_to_longbridge": 100.00003279592634,
+        "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+        "turnover_difference": -0.35000038146972656
+      },
+      {
+        "date": "2025-06-30",
+        "hithink_volume": 60746724,
+        "longbridge_volume": 607467,
+        "price_differences": {
+          "close": 0.0,
+          "high": 0.0,
+          "low": 0.0,
+          "open": 0.0
+        },
+        "raw_volume_ratio_hithink_to_longbridge": 100.00003950831898,
+        "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+        "turnover_difference": 0.1400001049041748
+      },
+      {
+        "date": "2023-11-20",
+        "hithink_volume": 61015723,
+        "longbridge_volume": 610157,
+        "price_differences": {
+          "close": 0.0,
+          "high": 0.0,
+          "low": 0.0,
+          "open": 0.0
+        },
+        "raw_volume_ratio_hithink_to_longbridge": 100.00003769521615,
+        "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+        "turnover_difference": 0.40000009536743164
+      },
+      {
+        "date": "2025-06-25",
+        "hithink_volume": 48552309,
+        "longbridge_volume": 485523,
+        "price_differences": {
+          "close": 0.0,
+          "high": 0.0,
+          "low": 0.0,
+          "open": 0.0
+        },
+        "raw_volume_ratio_hithink_to_longbridge": 100.00001853671196,
+        "status": "PASS_PRICE_TURNOVER_VOLUME_UNIT_UNRESOLVED",
+        "turnover_difference": 0.08999991416931152
+      }
+    ],
+    "sample_size": 15,
+    "schema_version": 1,
+    "status": "DATA_CONFLICT",
+    "volume_handling": "No conversion applied; formal feature uses only Longbridge within-source ratio.",
+    "volume_status": "UNIT_SEMANTICS_UNRESOLVED"
+  },
+  "determinism_contract": "same immutable CSV produces byte-equivalent analytical values",
+  "entry_ma_cross": "UNKNOWN",
+  "event_definition": {
+    "calibration_events": 24,
+    "distributions": {
+      "breakout_20_count": 32,
+      "breakout_40_count": 21,
+      "breakout_60_count": 18,
+      "close_location": {
+        "count": 32,
+        "max": 1.0,
+        "mean": 0.7830460476366048,
+        "median": 0.8238563878257709,
+        "min": 0.24242424242424396,
+        "p25": 0.7261022514071271,
+        "p75": 0.9179220375834753
+      },
+      "day_return": {
+        "count": 32,
+        "max": 0.09997143673236208,
+        "mean": 0.04189546783961131,
+        "median": 0.03580746507542498,
+        "min": 0.002337055310309033,
+        "p25": 0.021308917795311244,
+        "p75": 0.06330143197951132
+      },
+      "distance_ma250_atr": {
+        "count": 32,
+        "max": 8.988313864306791,
+        "mean": 2.9395649889929953,
+        "median": 3.912413455249891,
+        "min": -7.589990922844174,
+        "p25": 1.6068819953526206,
+        "p75": 5.497967529967186
+      },
+      "range_atr": {
+        "count": 32,
+        "max": 4.781954887218047,
+        "mean": 1.9040367034780838,
+        "median": 1.8608410113637155,
+        "min": 0.4999999999999989,
+        "p25": 1.2678663454781298,
+        "p75": 2.3447295989643484
+      },
+      "volume_ratio_20": {
+        "count": 32,
+        "max": 4.682966821654012,
+        "mean": 2.19889445471482,
+        "median": 1.9860941767575646,
+        "min": 0.8347022431221355,
+        "p25": 1.4490632447907144,
+        "p75": 2.722362951894109
+      }
+    },
+    "events": 32,
+    "thresholds_selected_after_outcomes": false,
+    "validation_events": 8,
+    "wide_pool": "Daily Close > prior 20D, 40D, or 60D Daily High"
+  },
+  "historical_market_context": "DEFERRED",
+  "history": {
+    "calibration_end": "2025-08-31",
+    "calibration_start": "2023-09-01",
+    "formal_start": "2023-09-01",
+    "target_date": "2026-09-04",
+    "target_excluded_from_fitting": true,
+    "validation_end": "2026-09-03",
+    "validation_start": "2025-09-01",
+    "warmup_start": "2022-08-01"
+  },
+  "lookahead": "PASS",
+  "ma250_defense": {
+    "assessment": "INCONCLUSIVE",
+    "atr_protection_note": "2ATR is an explicit exploratory comparator, not a 600150 production stop.",
+    "comparators": {
+      "breakout_reference": {
+        "sample_size": 11,
+        "trigger_rate_5d": 0.5454545454545454,
+        "washout_rate_5d": 0.2727272727272727
+      },
+      "exploratory_close_minus_2atr": {
+        "sample_size": 11,
+        "trigger_rate_5d": 0.09090909090909091,
+        "washout_rate_5d": 0.0
+      },
+      "ma250": {
+        "sample_size": 11,
+        "trigger_rate_5d": 0.36363636363636365,
+        "washout_rate_5d": 0.2727272727272727
+      }
+    },
+    "reason": "Only 11 same-signature events; MA250 triggered in 4/11 and washed out a later-positive T+5 path in 3/11.",
+    "status": "EXPLORATORY"
+  },
+  "mode": "OFFLINE_RESEARCH_SHADOW_EXPERIMENT",
+  "name": "中国船舶",
+  "opening_gap_study": {
+    "auction_interpretation": "PROVISIONAL_ONLY_IF_AUCTION_OPEN_BRIDGE_CONFIRMED",
+    "bucket_method": "Calibration terciles; Validation assigned without refitting",
+    "high_boundary": 0.001536570374923274,
+    "historical_field": "daily_open",
+    "low_boundary": -0.0031735956839099577,
+    "minimum_segment_sample": 5,
+    "objective": "PRECISION_FIRST",
+    "scenarios": {
+      "HIGH_OPEN": {
+        "calibration": {
+          "false_break_close_5d_rate": 0.3333333333333333,
+          "false_break_price_5d_rate": 0.6666666666666666,
+          "median_mae_5d": -0.04390243902439017,
+          "median_mfe_5d": 0.03872157344806393,
+          "sample_size": 3,
+          "t1_average_return": 0.01692521317507271,
+          "t1_median_return": 0.024277811923786086,
+          "t1_positive_rate": 0.6666666666666666,
+          "t3_average_return": 0.005995755157768734,
+          "t3_median_return": 0.008618625807996105,
+          "t3_positive_rate": 0.6666666666666666,
+          "t5_average_return": -0.010067599549961948,
+          "t5_median_return": -0.024390243902438935,
+          "t5_positive_rate": 0.3333333333333333,
+          "worst_mae_5d": -0.04716303567153468
+        },
+        "decision": {
+          "action": "NO_SIGNAL",
+          "reason": "requires at least 5 rows in each segment",
+          "status": "SAMPLE_THIN"
+        },
+        "validation": {
+          "false_break_close_5d_rate": 0.0,
+          "false_break_price_5d_rate": 0.0,
+          "median_mae_5d": 0.0045351473922901064,
+          "median_mfe_5d": 0.11394557823129237,
+          "sample_size": 1,
+          "t1_average_return": 0.02947845804988658,
+          "t1_median_return": 0.02947845804988658,
+          "t1_positive_rate": 1.0,
+          "t3_average_return": 0.0941043083900226,
+          "t3_median_return": 0.0941043083900226,
+          "t3_positive_rate": 1.0,
+          "t5_average_return": 0.08871882086167782,
+          "t5_median_return": 0.08871882086167782,
+          "t5_positive_rate": 1.0,
+          "worst_mae_5d": 0.0045351473922901064
+        }
+      },
+      "LOW_OPEN": {
+        "calibration": {
+          "false_break_close_5d_rate": 0.3333333333333333,
+          "false_break_price_5d_rate": 0.6666666666666666,
+          "median_mae_5d": -0.013024602026049159,
+          "median_mfe_5d": 0.02315484804630974,
+          "sample_size": 3,
+          "t1_average_return": -0.023068854223895707,
+          "t1_median_return": -0.0021707670043416005,
+          "t1_positive_rate": 0.3333333333333333,
+          "t3_average_return": -0.013466154752288887,
+          "t3_median_return": -0.007959479015918869,
+          "t3_positive_rate": 0.3333333333333333,
+          "t5_average_return": -0.009491660499086082,
+          "t5_median_return": 0.012662807525325448,
+          "t5_positive_rate": 0.6666666666666666,
+          "worst_mae_5d": -0.0921478060046188
+        },
+        "decision": {
+          "action": "NO_SIGNAL",
+          "reason": "requires at least 5 rows in each segment",
+          "status": "SAMPLE_THIN"
+        },
+        "validation": {
+          "false_break_close_5d_rate": 0.0,
+          "false_break_price_5d_rate": 0.0,
+          "median_mae_5d": -0.011563876651982441,
+          "median_mfe_5d": 0.1555616740088106,
+          "sample_size": 1,
+          "t1_average_return": 0.004405286343612147,
+          "t1_median_return": 0.004405286343612147,
+          "t1_positive_rate": 1.0,
+          "t3_average_return": 0.06828193832599116,
+          "t3_median_return": 0.06828193832599116,
+          "t3_positive_rate": 1.0,
+          "t5_average_return": 0.13766519823788537,
+          "t5_median_return": 0.13766519823788537,
+          "t5_positive_rate": 1.0,
+          "worst_mae_5d": -0.011563876651982441
+        }
+      },
+      "NEUTRAL_OPEN": {
+        "calibration": {
+          "false_break_close_5d_rate": 0.0,
+          "false_break_price_5d_rate": 0.0,
+          "median_mae_5d": -0.005364468286525814,
+          "median_mfe_5d": 0.06658251814452498,
+          "sample_size": 1,
+          "t1_average_return": 0.004102240454401995,
+          "t1_median_return": 0.004102240454401995,
+          "t1_positive_rate": 1.0,
+          "t3_average_return": 0.05175134111707158,
+          "t3_median_return": 0.05175134111707158,
+          "t3_positive_rate": 1.0,
+          "t5_average_return": 0.049542442410855037,
+          "t5_median_return": 0.049542442410855037,
+          "t5_positive_rate": 1.0,
+          "worst_mae_5d": -0.005364468286525814
+        },
+        "decision": {
+          "action": "NO_SIGNAL",
+          "reason": "requires at least 5 rows in each segment",
+          "status": "SAMPLE_THIN"
+        },
+        "validation": {
+          "false_break_close_5d_rate": 0.5,
+          "false_break_price_5d_rate": 0.5,
+          "median_mae_5d": -0.01885999730655008,
+          "median_mfe_5d": 0.06653920032888438,
+          "sample_size": 2,
+          "t1_average_return": 0.0035482659143907247,
+          "t1_median_return": 0.0035482659143907247,
+          "t1_positive_rate": 1.0,
+          "t3_average_return": 0.028256416435715137,
+          "t3_median_return": 0.028256416435715137,
+          "t3_positive_rate": 0.5,
+          "t5_average_return": 0.0392910556197415,
+          "t5_median_return": 0.0392910556197415,
+          "t5_positive_rate": 0.5,
+          "worst_mae_5d": -0.022435020519835813
+        }
+      }
+    }
+  },
+  "production_rule_modified": false,
+  "production_runtime_modified": false,
+  "schema_version": 1,
+  "similar_outcomes": {
+    "false_break_close_1d_rate": 0.09090909090909091,
+    "false_break_close_3d_rate": 0.2727272727272727,
+    "false_break_close_5d_rate": 0.2727272727272727,
+    "false_break_price_1d_rate": 0.36363636363636365,
+    "false_break_price_3d_rate": 0.45454545454545453,
+    "false_break_price_5d_rate": 0.45454545454545453,
+    "sample_size": 11,
+    "t1": {
+      "average_return": 0.0024228721391102892,
+      "median_mae": -0.007387140902872624,
+      "median_mfe": 0.01136005048911315,
+      "median_return": 0.004405286343612147,
+      "positive_rate": 0.7272727272727273,
+      "sample_size": 11,
+      "worst_mae": -0.07459584295611998
+    },
+    "t10": {
+      "average_return": 0.027909249693411523,
+      "median_mae": -0.015284974093264347,
+      "median_mfe": 0.07267534116153596,
+      "median_return": 0.03437047756874101,
+      "positive_rate": 0.7272727272727273,
+      "sample_size": 11,
+      "worst_mae": -0.12886836027713622
+    },
+    "t3": {
+      "average_return": 0.022567201992814104,
+      "median_mae": -0.013024602026049159,
+      "median_mfe": 0.03872157344806393,
+      "median_return": 0.022126613398893547,
+      "positive_rate": 0.6363636363636364,
+      "sample_size": 11,
+      "worst_mae": -0.0808314087759815
+    },
+    "t5": {
+      "average_return": 0.026893708418432468,
+      "median_mae": -0.013024602026049159,
+      "median_mfe": 0.06658251814452498,
+      "median_return": 0.020282728948985973,
+      "positive_rate": 0.6363636363636364,
+      "sample_size": 11,
+      "worst_mae": -0.0921478060046188
+    }
+  },
+  "similar_sample_status": "SAMPLE_THIN",
+  "similarity": {
+    "breakout_signature": "100",
+    "calibration_scaling_rows": 7,
+    "distance": "standardized_euclidean",
+    "eligible_same_signature": 11,
+    "features": [
+      "breakout_distance_20_atr",
+      "breakout_distance_40_atr",
+      "breakout_distance_60_atr",
+      "day_return",
+      "range_atr",
+      "volume_ratio_20",
+      "close_location",
+      "distance_ma250_atr",
+      "above_ma10",
+      "above_ma20",
+      "above_ma60",
+      "above_ma250",
+      "ma10_slope_atr",
+      "ma20_slope_atr",
+      "ma60_slope_atr",
+      "ma250_slope_atr"
+    ],
+    "outcomes_used_in_similarity": false,
+    "scaling": {
+      "above_ma10": {
+        "mean": 1.0,
+        "scale": 1.0
+      },
+      "above_ma20": {
+        "mean": 1.0,
+        "scale": 1.0
+      },
+      "above_ma250": {
+        "mean": 0.5714285714285714,
+        "scale": 0.4948716593053935
+      },
+      "above_ma60": {
+        "mean": 0.8571428571428571,
+        "scale": 0.3499271061118826
+      },
+      "breakout_distance_20_atr": {
+        "mean": 0.6402419947219027,
+        "scale": 0.3642677553394846
+      },
+      "breakout_distance_40_atr": {
+        "mean": -2.131862648464023,
+        "scale": 1.3990066696296444
+      },
+      "breakout_distance_60_atr": {
+        "mean": -2.5417634710787214,
+        "scale": 1.9142237797641606
+      },
+      "close_location": {
+        "mean": 0.7147273634949559,
+        "scale": 0.23974888692300178
+      },
+      "day_return": {
+        "mean": 0.03610356541712546,
+        "scale": 0.024570500865475388
+      },
+      "distance_ma250_atr": {
+        "mean": -1.0892639386925245,
+        "scale": 4.717581969970858
+      },
+      "ma10_slope_atr": {
+        "mean": 0.21017017241459096,
+        "scale": 0.060572990768461225
+      },
+      "ma20_slope_atr": {
+        "mean": 0.11564459604040618,
+        "scale": 0.04010450122993774
+      },
+      "ma250_slope_atr": {
+        "mean": -0.005619631347865052,
+        "scale": 0.030202796473720234
+      },
+      "ma60_slope_atr": {
+        "mean": 0.0077909848646668,
+        "scale": 0.03829790497411613
+      },
+      "range_atr": {
+        "mean": 1.8547889825801185,
+        "scale": 0.48252391504880676
+      },
+      "volume_ratio_20": {
+        "mean": 2.3808076819400106,
+        "scale": 0.4106986909195383
+      }
+    }
+  },
+  "study_version": "historical_breakout_add_study_v0.1",
+  "symbol": "600150.SH",
+  "target_assessment": {
+    "breakout_signature": "100",
+    "entry_37_47_assessment": "EVIDENCE_INSUFFICIENT",
+    "entry_above_breakout_reference_atr": 2.1616897305171134,
+    "entry_above_ma250_atr": 2.1322010196649654,
+    "entry_below_day_high_pct": -0.007417218543046333,
+    "entry_equals_target_close": true,
+    "historical_type": "STRONG_20D_CLOSE_BREAKOUT_NOT_40D_OR_60D_BREAKOUT",
+    "key_level_35_01": "APPROXIMATE",
+    "ma250_minus_35_01": 0.3689200000000028,
+    "ma250_minus_35_01_atr": 0.37617479970867007,
+    "ma250_near_35": "CONFIRMED"
+  },
+  "target_percentiles_in_wide_pool": {
+    "breakout_distance_20_atr": 0.9375,
+    "breakout_distance_40_atr": 0.3125,
+    "breakout_distance_60_atr": 0.375,
+    "close_location": 0.71875,
+    "day_return": 0.9375,
+    "distance_ma250_atr": 0.28125,
+    "range_atr": 0.9375,
+    "volume_ratio_20": 1.0
+  },
+  "top_similar_count": 11
+}

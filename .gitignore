@@ -33,6 +33,13 @@ research/livermore/**/*.csv
 research/livermore/**/source_manifest.json
 research/livermore/format_task020.py
 
+# Local-only 600150 research evidence and private position facts
+research/600150/raw/
+research/600150/derived/
+research/600150/historical_breakout_events.csv
+research/600150/position_thesis_*.json
+research/600150/position_thesis_*.md
+
 # macOS and IDE
 .DS_Store
 .idea/

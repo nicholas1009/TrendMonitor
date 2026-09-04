@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "version": "data_source_matrix_v0.1",
+  "symbol": "600150.SH",
+  "status": "PARTIAL",
+  "rows": [
+    {
+      "capability": "Trading Calendar",
+      "primary_source": "Hithink",
+      "validation_source": null,
+      "capability_status": "CONFIRMED",
+      "semantics": "Authoritative A-share trading-day sequence through the current Asia/Shanghai date",
+      "fallback": "FAIL_CLOSED",
+      "known_limitation": "The endpoint does not pre-confirm future dates; 2026-09-07 was not yet present when audited."
+    },
+    {
+      "capability": "Auction Final",
+      "primary_source": "Hithink",
+      "validation_source": "Longbridge Daily Open after the session",
+      "capability_status": "CONFIRMED_FOR_600150",
+      "semantics": "Use only auction_phase=closed and data_status=final; auction_price remains distinct from provider_observed_at",
+      "fallback": "NO_DECISION_DATA_NOT_READY",
+      "known_limitation": "Snapshot accepts thscodes and stage only; no historical trade-date parameter."
+    },
+    {
+      "capability": "Historical Auction",
+      "primary_source": null,
+      "validation_source": null,
+      "capability_status": "UNSUPPORTED",
+      "semantics": "No per-symbol historical Auction Final contract",
+      "fallback": "Longbridge daily_open for OPEN_BEHAVIOR only",
+      "known_limitation": "The date-aware short-term benchmark returns auction_pct/tags, not per-symbol Auction Final price."
+    },
+    {
+      "capability": "Daily OHLCV",
+      "primary_source": "Longbridge DIRECT DAILY NoAdjust",
+      "validation_source": "Hithink prices/historical adjust=none, 15 isolated dates",
+      "capability_status": "PARTIAL_VOLUME_UNIT_CONFLICT",
+      "semantics": "Formal ATR, moving averages, breakout features and outcomes use only Longbridge within-source values",
+      "fallback": "NONE_FOR_FORMAL_CALCULATION",
+      "known_limitation": "Dates, OHLC and turnover agree; raw volume is approximately 100x and the Longbridge unit is not declared in the local contract."
+    },
+    {
+      "capability": "15m",
+      "primary_source": "Longbridge DIRECT INTRADAY NoAdjust",
+      "validation_source": null,
+      "capability_status": "CONFIRMED",
+      "semantics": "Bounded T0 through T+2 post-open path study only",
+      "fallback": "NONE",
+      "known_limitation": "Hithink REST contract does not support minute K lines."
+    },
+    {
+      "capability": "60m",
+      "primary_source": "Longbridge DIRECT INTRADAY NoAdjust",
+      "validation_source": null,
+      "capability_status": "CONFIRMED",
+      "semantics": "Bounded T0 through T+2 post-open path study only",
+      "fallback": "NONE",
+      "known_limitation": "Hithink REST contract does not support minute K lines."
+    },
+    {
+      "capability": "Latest Quote",
+      "primary_source": "Hithink",
+      "validation_source": "Longbridge",
+      "capability_status": "CONFIRMED_PRICE_FIELDS",
+      "semantics": "Latest/previous/open/high/low price cross-check only",
+      "fallback": "NO_QUOTE_CONCLUSION",
+      "known_limitation": "Volume has the same unresolved cross-provider unit difference as Daily."
+    },
+    {
+      "capability": "Volume",
+      "primary_source": "Longbridge within-source ratio",
+      "validation_source": "Hithink sampled raw volume",
+      "capability_status": "UNIT_SEMANTICS_UNRESOLVED",
+      "semantics": "volume_ratio_20 never mixes providers and applies no empirical conversion",
+      "fallback": "REPORT_CONFLICT",
+      "known_limitation": "Observed Hithink/Longbridge raw ratio is approximately 100; no conversion is asserted."
+    },
+    {
+      "capability": "Turnover",
+      "primary_source": "Longbridge DIRECT DAILY NoAdjust",
+      "validation_source": "Hithink sampled Daily",
+      "capability_status": "CONFIRMED",
+      "semantics": "Original currency amount",
+      "fallback": "NONE",
+      "known_limitation": "Only 15 sampled dates were cross-validated."
+    },
+    {
+      "capability": "Sector / Industry",
+      "primary_source": null,
+      "validation_source": null,
+      "capability_status": "DEFERRED",
+      "semantics": "No new shipbuilding-sector score is created",
+      "fallback": "NONE",
+      "known_limitation": "Outside TASK_026B scope."
+    }
+  ]
+}
