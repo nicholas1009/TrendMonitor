@@ -96,6 +96,12 @@ def not_ready_raw() -> dict:
     }
 
 
+def matched_raw() -> dict:
+    raw = final_raw()
+    raw["data"]["auction_phase"] = "matched"
+    return raw
+
+
 class Calendar:
     def __init__(self, trading: bool = True):
         self.trading = trading
@@ -198,7 +204,7 @@ class AuctionRuntimeTests(unittest.TestCase):
         self.assertEqual(provider.calls, [])
 
     def test_window_allows_request_at_both_boundaries(self):
-        for clock in ("09:25:00", "09:27:59"):
+        for clock in ("09:25:00", "09:32:59"):
             with self.subTest(clock=clock):
                 provider = Provider([not_ready_raw()])
                 result = self.runner(provider).run(as_of=at(clock))
@@ -241,6 +247,38 @@ class AuctionRuntimeTests(unittest.TestCase):
             ["DATA_NOT_READY", "DATA_NOT_READY", "SUCCESS"],
         )
 
+    def test_matched_through_0927_then_closed_at_0928_succeeds(self):
+        provider = Provider([matched_raw(), matched_raw(), matched_raw(), final_raw()])
+        runner = self.runner(provider)
+
+        results = [
+            runner.run(as_of=at("09:25:00")),
+            runner.run(as_of=at("09:26:00")),
+            runner.run(as_of=at("09:27:00")),
+            runner.run(as_of=at("09:28:00")),
+        ]
+
+        self.assertEqual(
+            [item["status"] for item in results],
+            ["DATA_NOT_READY", "DATA_NOT_READY", "DATA_NOT_READY", "SUCCESS"],
+        )
+        self.assertEqual(len(provider.calls), 4)
+        self.assertEqual(len(self.notifier.snapshots), 1)
+        self.assertEqual(len(self.notifier.failures), 0)
+
+    def test_matched_through_0931_then_closed_at_0932_succeeds(self):
+        provider = Provider([matched_raw() for _ in range(7)] + [final_raw()])
+        runner = self.runner(provider)
+        clocks = [f"09:{minute:02d}:00" for minute in range(25, 33)]
+
+        results = [runner.run(as_of=at(clock)) for clock in clocks]
+
+        self.assertEqual([item["status"] for item in results[:-1]], ["DATA_NOT_READY"] * 7)
+        self.assertEqual(results[-1]["status"], "SUCCESS")
+        self.assertEqual(len(provider.calls), 8)
+        self.assertEqual(len(self.notifier.snapshots), 1)
+        self.assertEqual(len(self.notifier.failures), 0)
+
     def test_non_trading_day_skips(self):
         provider = Provider([final_raw()])
         result = self.runner(provider, trading=False).run(as_of=at("09:25:00"))
@@ -250,9 +288,9 @@ class AuctionRuntimeTests(unittest.TestCase):
     def test_after_deadline_records_one_terminal_failure_and_one_bark(self):
         provider = Provider([not_ready_raw()])
         runner = self.runner(provider)
-        attempt = runner.run(as_of=at("09:27:59"))
-        first = runner.run(as_of=at("09:28:00"))
-        second = runner.run(as_of=at("09:29:00"))
+        attempt = runner.run(as_of=at("09:32:59"))
+        first = runner.run(as_of=at("09:33:00"))
+        second = runner.run(as_of=at("09:34:00"))
         self.assertEqual(attempt["status"], "DATA_NOT_READY")
         self.assertEqual((first["status"], first["failure_reason"]), ("FAILED", "DATA_NOT_READY"))
         self.assertEqual((second["status"], second["reason"]), ("SKIPPED", "TERMINAL_FAILURE_RECORDED"))
@@ -260,25 +298,25 @@ class AuctionRuntimeTests(unittest.TestCase):
         self.assertEqual(len(self.store.event_entries()), 2)
         self.assertEqual(len(self.notifier.failures), 1)
 
-    def test_three_not_ready_ticks_terminalize_once_after_window(self):
-        provider = Provider([not_ready_raw(), not_ready_raw(), not_ready_raw()])
+    def test_all_window_ticks_not_ready_terminalize_once_after_window(self):
+        provider = Provider([matched_raw() for _ in range(8)])
         runner = self.runner(provider)
 
-        results = [
-            runner.run(as_of=at("09:25:00")),
-            runner.run(as_of=at("09:26:00")),
-            runner.run(as_of=at("09:27:00")),
-            runner.run(as_of=at("09:28:00")),
-            runner.run(as_of=at("09:29:00")),
+        attempts = [
+            runner.run(as_of=at(f"09:{minute:02d}:00"))
+            for minute in range(25, 33)
         ]
+        first = runner.run(as_of=at("09:33:00"))
+        second = runner.run(as_of=at("09:34:00"))
 
-        self.assertEqual(len(provider.calls), 3)
-        self.assertEqual(results[3]["status"], "FAILED")
-        self.assertEqual(results[4]["status"], "SKIPPED")
+        self.assertEqual([item["status"] for item in attempts], ["DATA_NOT_READY"] * 8)
+        self.assertEqual(len(provider.calls), 8)
+        self.assertEqual(first["status"], "FAILED")
+        self.assertEqual(second["status"], "SKIPPED")
         self.assertEqual(len(self.notifier.failures), 1)
         self.assertEqual(
             [item["status"] for item in self.store.event_entries()],
-            ["DATA_NOT_READY", "DATA_NOT_READY", "DATA_NOT_READY", "FAILED"],
+            ["DATA_NOT_READY"] * 8 + ["FAILED"],
         )
 
     def test_first_tick_final_prevents_all_later_requests(self):
@@ -293,9 +331,23 @@ class AuctionRuntimeTests(unittest.TestCase):
         self.assertEqual(len(provider.calls), 1)
         self.assertEqual(len(self.notifier.snapshots), 1)
 
+    def test_delayed_provider_observation_keeps_auction_market_time_at_0925(self):
+        provider = Provider([matched_raw(), final_raw()])
+        runner = self.runner(provider)
+
+        runner.run(as_of=at("09:28:00"))
+        result = runner.run(as_of=at("09:29:00"))
+
+        self.assertEqual(result["status"], "SUCCESS")
+        self.assertEqual(result["auction_market_time"], "2026-09-01T09:25:00+08:00")
+        self.assertEqual(result["provider_observed_at"], "2026-09-01T09:29:00+08:00")
+        raw = json.loads(Path(result["raw_snapshot_path"]).read_text())
+        self.assertEqual(raw["auction_market_time"], result["auction_market_time"])
+        self.assertEqual(raw["provider_observed_at"], result["provider_observed_at"])
+
     def test_late_deployment_without_attempt_does_not_invent_data_failure(self):
         provider = Provider([final_raw()])
-        result = self.runner(provider).run(as_of=at("09:28:00"))
+        result = self.runner(provider).run(as_of=at("09:33:00"))
         self.assertEqual(
             (result["status"], result["reason"]),
             ("SKIPPED", "MISSED_AUTOMATIC_WINDOW"),
@@ -314,7 +366,7 @@ class AuctionRuntimeTests(unittest.TestCase):
 
     def test_no_network_never_requests_or_records_failure(self):
         provider = Provider([final_raw()])
-        result = self.runner(provider).run(as_of=at("09:28:00"), no_network=True)
+        result = self.runner(provider).run(as_of=at("09:33:00"), no_network=True)
         self.assertEqual((result["status"], result["reason"]), ("SKIPPED", "NO_NETWORK"))
         self.assertEqual(provider.calls, [])
         self.assertEqual(self.store.event_entries(), [])

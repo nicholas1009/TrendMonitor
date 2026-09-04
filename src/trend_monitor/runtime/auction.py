@@ -26,7 +26,10 @@ AUCTION_INSTRUMENT_IDS = (
 FINAL_AUCTION_PHASE = "closed"
 FINAL_DATA_STATUS = "final"
 AUCTION_START = time(9, 25)
-AUCTION_END = time(9, 27, 59, 999999)
+# Provisional provider grace: Hithink returned final/matched through the old
+# 09:27:59 boundary on 2026-09-03 and 2026-09-04.  Keep the wait finite while
+# more live closed/final availability samples are collected.
+AUCTION_FINAL_WAIT_WINDOW_END = time(9, 32, 59, 999999)
 
 AUCTION_ITEM_FIELDS = (
     "thscode",
@@ -164,6 +167,13 @@ class AuctionRunner:
     def _scheduled_at(as_of: datetime) -> str:
         return datetime.combine(as_of.date(), AUCTION_START, tzinfo=as_of.tzinfo).isoformat()
 
+    @classmethod
+    def _time_semantics(cls, as_of: datetime) -> dict[str, str]:
+        return {
+            "auction_market_time": cls._scheduled_at(as_of),
+            "provider_observed_at": as_of.isoformat(),
+        }
+
     def _notify_snapshot(
         self,
         snapshot: dict[str, Any],
@@ -234,6 +244,7 @@ class AuctionRunner:
             "idempotency_key": self._key(trading_date),
             "trading_date": trading_date,
             "scheduled_at": self._scheduled_at(as_of),
+            **self._time_semantics(as_of),
             "execution_mode": execution_mode,
             "started_at": as_of.isoformat(),
             "completed_at": as_of.isoformat(),
@@ -269,6 +280,7 @@ class AuctionRunner:
             "idempotency_key": self._key(trading_date),
             "trading_date": trading_date,
             "scheduled_at": self._scheduled_at(as_of),
+            **self._time_semantics(as_of),
             "execution_mode": "LIVE_SCHEDULED",
             "started_at": as_of.isoformat(),
             "completed_at": as_of.isoformat(),
@@ -335,7 +347,11 @@ class AuctionRunner:
         if dry_run:
             return {
                 "status": "DRY_RUN",
-                "reason": "ELIGIBLE" if current_time <= AUCTION_END or catch_up else "DEADLINE_EXPIRED",
+                "reason": (
+                    "ELIGIBLE"
+                    if current_time <= AUCTION_FINAL_WAIT_WINDOW_END or catch_up
+                    else "DEADLINE_EXPIRED"
+                ),
                 "trading_date": trading_date,
             }
         if no_network:
@@ -353,7 +369,7 @@ class AuctionRunner:
             success = self.store.event_record(key, statuses={"SUCCESS"})
             if success is not None:
                 return {"status": "SKIPPED", "reason": "ALREADY_SUCCESSFUL"}
-            if current_time > AUCTION_END and not catch_up:
+            if current_time > AUCTION_FINAL_WAIT_WINDOW_END and not catch_up:
                 attempted = self.store.event_record(key, statuses={"DATA_NOT_READY"})
                 if attempted is None:
                     return {
@@ -449,6 +465,7 @@ class AuctionRunner:
                 "symbols": symbols,
                 "stage": AUCTION_STAGE,
                 "fetched_at": fetched_at.isoformat(),
+                **self._time_semantics(as_of),
                 "auction_phase": parsed["auction_phase"],
                 "data_status": parsed["data_status"],
                 "raw_response": raw,
@@ -481,6 +498,7 @@ class AuctionRunner:
                 "idempotency_key": key,
                 "trading_date": trading_date,
                 "scheduled_at": self._scheduled_at(as_of),
+                **self._time_semantics(as_of),
                 "execution_mode": execution_mode,
                 "started_at": as_of.isoformat(),
                 "completed_at": completed_at,

@@ -6,7 +6,9 @@
 
 - 固定标的：`600487.SH` 亨通光电、`002463.SZ` 沪电股份。
 - 官方接口：`GET /api/a-share/auction/snapshot`，请求 `stage=final`。
-- 自动窗口：A 股交易日 `09:25:00` 至 `09:27:59`（`Asia/Shanghai`）。
+- 自动窗口：A 股交易日 `09:25:00` 至 `09:32:59`（`Asia/Shanghai`）。该上限是
+  TASK_024A 基于 2026-09-03、2026-09-04 live evidence 设置的 provisional provider
+  grace，状态为 `PENDING_MORE_LIVE_SAMPLES`，不改变 09:25 Auction market time。
 - 终态条件：`auction_phase=closed` 且 `data_status=final`，并且两个标的都存在。
 - 复用 `com.trendmonitor.local.intraday` 的 60 秒 Tick；没有新增 LaunchAgent、线程或秒级调度器。
 - 复用 Hithink Provider、Provider Registry、Raw Cache、Runtime Store、NotificationService、Bark Adapter 和中文 Presentation Layer。
