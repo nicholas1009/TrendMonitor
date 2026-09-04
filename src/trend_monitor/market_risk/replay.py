@@ -159,6 +159,77 @@ class HistoricalRiskInputBuilder:
                 periods.append(ReplayPeriod(as_of, inputs, source_ids))
         return tuple(periods)
 
+    def build_intraday_prefix(
+        self,
+        *,
+        as_of: datetime,
+        source_results: Mapping[str, ProviderDataResult],
+    ) -> tuple[ReplayPeriod, ...]:
+        """Rebuild today's completed periods from the same historical Raw snapshots.
+
+        Complete-day replay remains unchanged. This method supplies only the
+        current trading-day prefix so a live current result is compared with
+        the same period rather than the prior complete day's 15:00 result.
+        """
+        if as_of.tzinfo is None:
+            raise TrendMonitorError(ErrorCategory.INVALID_DATA, "as_of must be timezone-aware")
+        local_as_of = as_of.astimezone(SHANGHAI)
+        expected = set(self.rules.instrument_ids)
+        if set(source_results) != expected:
+            raise TrendMonitorError(
+                ErrorCategory.DATA_INCOMPLETE,
+                "intraday replay requires source results for every market index",
+            )
+        day_text = local_as_of.date().isoformat()
+        periods = []
+        for end_label in PERIOD_ENDS:
+            period_as_of = datetime.combine(
+                local_as_of.date(), time.fromisoformat(end_label), tzinfo=SHANGHAI
+            )
+            if period_as_of > local_as_of:
+                break
+            allowed = set(SOURCE_PREFIXES[end_label])
+            inputs = {}
+            source_ids = {}
+            for instrument_id in self.rules.instrument_ids:
+                result = source_results[instrument_id]
+                prefix = tuple(
+                    item
+                    for item in result.normalized
+                    if record_timestamp(item).date() == local_as_of.date()
+                    and record_timestamp(item).strftime("%H:%M") in allowed
+                )
+                if not prefix:
+                    raise TrendMonitorError(
+                        ErrorCategory.DATA_INCOMPLETE,
+                        f"intraday replay source prefix missing: {instrument_id} {period_as_of.isoformat()}",
+                    )
+                metadata = replace(
+                    result.metadata,
+                    source_timestamp=max(
+                        item.timestamp for item in prefix if item.timestamp is not None
+                    ),
+                )
+                sliced = replace(result, normalized=prefix, metadata=metadata)
+                risk_input = self.assembler.assemble_minute(
+                    sliced,
+                    asset_type=self.market_data.registry.get_instrument(instrument_id).asset_type,
+                    period="60m",
+                    as_of=period_as_of,
+                    trading_date=day_text,
+                )
+                if risk_input.preflight_status is PreflightStatus.BLOCKED:
+                    raise TrendMonitorError(
+                        ErrorCategory.DATA_INCOMPLETE,
+                        f"intraday replay Risk Input blocked: {instrument_id} {period_as_of.isoformat()}",
+                    )
+                inputs[instrument_id] = risk_input
+                source_ids[instrument_id] = (
+                    f"{result.metadata.raw_path}#as_of={period_as_of.isoformat()}"
+                )
+            periods.append(ReplayPeriod(period_as_of, inputs, source_ids))
+        return tuple(periods)
+
     def _get_history_with_network_retry(
         self,
         *,

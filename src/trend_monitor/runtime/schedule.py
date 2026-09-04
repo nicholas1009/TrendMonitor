@@ -15,6 +15,7 @@ def due_periods(
     periods: Iterable[dict[str, str]],
     buffer_minutes: int,
     live_grace_minutes: int,
+    closing_live_grace_minutes: int | None = None,
     historical_execution: bool = False,
 ) -> tuple[ScheduledPeriod, ...]:
     if as_of.tzinfo is None:
@@ -26,7 +27,12 @@ def due_periods(
         scheduled = end + timedelta(minutes=buffer_minutes)
         if scheduled > as_of:
             continue
-        live = not historical_execution and as_of <= scheduled + timedelta(minutes=live_grace_minutes)
+        grace_minutes = (
+            closing_live_grace_minutes
+            if end.time() == time(15, 0) and closing_live_grace_minutes is not None
+            else live_grace_minutes
+        )
+        live = not historical_execution and as_of <= scheduled + timedelta(minutes=grace_minutes)
         mode = "LIVE_SCHEDULED" if live else "CATCH_UP"
         eligibility = "ELIGIBLE" if live else "CATCH_UP_STALE_FUTURE_POLICY"
         output.append(

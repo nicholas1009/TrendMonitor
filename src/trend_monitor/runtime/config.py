@@ -35,6 +35,11 @@ class RuntimeConfig:
             raise ValueError("formal 60m periods changed")
         if int(self.raw["buffer_minutes"]) < 0 or int(self.raw["buffer_minutes"]) > 15:
             raise ValueError("invalid data arrival buffer")
+        closing_grace = int(
+            self.raw.get("closing_live_grace_minutes", self.raw["live_grace_minutes"])
+        )
+        if closing_grace < int(self.raw["live_grace_minutes"]) or closing_grace > 60:
+            raise ValueError("invalid finite closing provider grace")
         if self.raw["industry_context"] != "DEFERRED":
             raise ValueError("industry context cannot be a runtime dependency")
         if int(self.raw["retry"]["max_attempts"]) < 1:

@@ -16,6 +16,9 @@ from trend_monitor.market_risk import (
     MarketRiskOutputStore,
     render_market_60m_report,
 )
+from trend_monitor.quality import RiskFeatureContract
+from trend_monitor.registry import InstrumentRegistry
+from trend_monitor.risk_input import RiskInputAssembler
 from trend_monitor.schemas import (
     AnalysisPeriod,
     AssetType,
@@ -31,6 +34,7 @@ from trend_monitor.schemas import (
     RiskSourceTrace,
     SignalConfidence,
 )
+from tests.test_risk_input_assembly import result_for, source_records
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -311,6 +315,66 @@ class Market60mRiskEngineTests(unittest.TestCase):
 
 
 class HistoricalRiskInputBuilderRetryTests(unittest.TestCase):
+    def _intraday_sources(self):
+        base = source_records(
+            "60m",
+            instrument_id="index.csi500",
+            asset_type=AssetType.INDEX,
+            day="2026-09-04",
+        )
+        sources = {}
+        for instrument_id in RULES.instrument_ids:
+            trace = replace(
+                base[0].source_trace,
+                provider_symbol=f"{instrument_id}.CN",
+                raw_path=f"/raw/{instrument_id}.json",
+            )
+            records = tuple(
+                replace(
+                    item,
+                    instrument_id=instrument_id,
+                    symbol=f"{instrument_id}.CN",
+                    source_trace=trace,
+                )
+                for item in base
+            )
+            sources[instrument_id] = result_for("60m", records)
+        return sources
+
+    def test_intraday_prefix_rebuilds_same_day_1130_and_1400_periods(self):
+        service = Mock()
+        service.registry = InstrumentRegistry.load(ROOT / "config" / "instruments.json")
+        assembler = RiskInputAssembler(
+            RiskFeatureContract.load(ROOT / "config" / "risk_feature_contract.json")
+        )
+        builder = HistoricalRiskInputBuilder(service, assembler, RULES)
+        sources = self._intraday_sources()
+
+        at_1130 = builder.build_intraday_prefix(
+            as_of=datetime.fromisoformat("2026-09-04T11:30:00+08:00"),
+            source_results=sources,
+        )
+        at_1400 = builder.build_intraday_prefix(
+            as_of=datetime.fromisoformat("2026-09-04T14:00:00+08:00"),
+            source_results=sources,
+        )
+
+        self.assertEqual(
+            [item.as_of.strftime("%H:%M") for item in at_1130],
+            ["10:30", "11:30"],
+        )
+        self.assertEqual(
+            [item.as_of.strftime("%H:%M") for item in at_1400],
+            ["10:30", "11:30", "14:00"],
+        )
+        self.assertTrue(
+            all(
+                value.last_completed_bar_end == period.as_of.isoformat()
+                for period in (*at_1130, *at_1400)
+                for value in period.inputs.values()
+            )
+        )
+
     def test_reuses_supplied_source_results_without_provider_calls(self):
         service = Mock()
         service.registry = Mock()

@@ -40,6 +40,64 @@ from trend_monitor.services import MarketDataService  # noqa: E402
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 
 
+def _semantic_view(result) -> dict[str, object]:
+    value = result.to_dict()
+    return {
+        "trading_date": value["trading_date"],
+        "last_completed_bar_end": value["last_completed_bar_end"],
+        "risk_score": value["risk_score"],
+        "risk_light": value["risk_light"],
+        "risk_direction": value["risk_direction"],
+        "signal_confidence": value["signal_confidence"],
+        "breadth": value["breadth"],
+        "persistent_weakness": value["persistent_weakness"],
+        "downside_shocks": value["downside_shocks"],
+        "weighted_support_distortion": value["weighted_support_distortion"],
+        "broad_repair": value["broad_repair"],
+        "score_components": value["score_components"],
+        "index_states": [
+            {
+                key: item[key]
+                for key in (
+                    "instrument_id",
+                    "close",
+                    "close_change_pct",
+                    "one_period_direction",
+                    "two_period_direction",
+                    "three_period_close_direction",
+                    "persistent_weak",
+                    "repair_state",
+                    "downside_shock",
+                    "shock_reference_p95",
+                )
+            }
+            for item in value["index_states"]
+        ],
+    }
+
+
+def _first_diff(current: object, replay: object, path: str = "") -> dict[str, object] | None:
+    if isinstance(current, dict) and isinstance(replay, dict):
+        for key in sorted(set(current) | set(replay)):
+            diff = _first_diff(
+                current.get(key), replay.get(key), f"{path}.{key}" if path else key
+            )
+            if diff is not None:
+                return diff
+        return None
+    if isinstance(current, list) and isinstance(replay, list):
+        for index, (left, right) in enumerate(zip(current, replay)):
+            diff = _first_diff(left, right, f"{path}[{index}]")
+            if diff is not None:
+                return diff
+        if len(current) != len(replay):
+            return {"field": f"{path}.length", "current": len(current), "replay": len(replay)}
+        return None
+    if current != replay:
+        return {"field": path, "current": current, "replay": replay}
+    return None
+
+
 def _cached_history_results(
     cache: RawCache,
     registry: InstrumentRegistry,
@@ -108,6 +166,27 @@ def _cached_history_results(
     return results
 
 
+def _current_source_results(
+    cache: RawCache,
+    market_data: MarketDataService,
+    current_inputs: dict[str, object],
+) -> dict[str, ProviderDataResult]:
+    """Reload the exact Raw entries referenced by the current Risk Inputs."""
+    entries_by_path = {
+        str(Path(entry.path).resolve()): entry
+        for entry in cache.entries()
+        if entry.data_type is DataType.KLINE_60M
+    }
+    results = {}
+    for instrument_id, risk_input in current_inputs.items():
+        raw_path = getattr(getattr(risk_input, "source_trace"), "raw_path")
+        entry = entries_by_path.get(str(Path(raw_path).resolve())) if raw_path else None
+        if entry is None:
+            raise ValueError(f"current 60m Raw snapshot is not in cache: {instrument_id}")
+        results[instrument_id] = market_data.load_cached(entry)
+    return results
+
+
 def main() -> int:
     rules = Market60mRiskRules.load(PROJECT_ROOT / "config" / "market_60m_risk_rules.json")
     engine = Market60mRiskEngine(rules)
@@ -162,12 +241,25 @@ def main() -> int:
         end=end,
     )
     print(f"HISTORICAL RAW CACHE REUSED {len(cached_results)}/8")
-    periods = builder.build(
+    historical_periods = builder.build(
         start=start,
         end=end,
         required_days=80,
         source_results=cached_results,
     )
+    current_period_end = datetime.fromisoformat(
+        next(iter(current_inputs.values())).last_completed_bar_end or ""
+    ).astimezone(SHANGHAI)
+    current_source_results = _current_source_results(
+        raw_cache, market_data, current_inputs
+    )
+    intraday_periods = builder.build_intraday_prefix(
+        as_of=current_period_end,
+        source_results=current_source_results,
+    )
+    periods = tuple(
+        item for item in historical_periods if item.as_of.date() < current_period_end.date()
+    ) + intraday_periods
     replay = run_replay(engine, periods, replay_days=20)
 
     history = defaultdict(list)
@@ -189,13 +281,8 @@ def main() -> int:
     )
     determinism = replay.deterministic and current.to_dict() == repeated.to_dict()
     replay_current = replay.results[-1]
-    pipeline_match = (
-        current.last_completed_bar_end == replay_current.last_completed_bar_end
-        and current.risk_score == replay_current.risk_score
-        and current.risk_light == replay_current.risk_light
-        and [(item.instrument_id, item.close) for item in current.index_states]
-        == [(item.instrument_id, item.close) for item in replay_current.index_states]
-    )
+    first_diff = _first_diff(_semantic_view(current), _semantic_view(replay_current))
+    pipeline_match = first_diff is None
     human = render_market_60m_report(current)
     output_store = MarketRiskOutputStore(PROJECT_ROOT / "data" / "risk_outputs" / "market_60m")
     machine_path, human_path = output_store.save(current, human)
@@ -207,6 +294,7 @@ def main() -> int:
     replay_payload["current_machine_path"] = machine_path
     replay_payload["current_human_path"] = human_path
     replay_payload["current_pipeline_match"] = pipeline_match
+    replay_payload["current_pipeline_first_diff"] = first_diff
     append_only_replay_path = output_store.save_replay(
         replay_payload,
         last_completed_bar_end=current.last_completed_bar_end,
@@ -247,6 +335,12 @@ def main() -> int:
     print()
     print("CURRENT PIPELINE/REPLAY MATCH")
     print("PASS" if pipeline_match else "FAIL")
+    if first_diff is not None:
+        print(
+            "FIRST DIFF — "
+            f"field={first_diff['field']}; current={first_diff['current']}; "
+            f"replay={first_diff['replay']}"
+        )
     print(f"MACHINE RESULT {machine_path}")
     print(f"HUMAN REPORT {human_path}")
     print(f"APPEND-ONLY REPLAY {append_only_replay_path}")

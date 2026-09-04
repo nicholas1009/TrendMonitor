@@ -178,6 +178,24 @@ def expected_completed_system_bar_count(
     )
 
 
+def latest_completed_60m_period_end(as_of: datetime) -> datetime:
+    """Resolve the formal risk boundary separately from provider observation time."""
+    if as_of.tzinfo is None:
+        raise TrendMonitorError(ErrorCategory.INVALID_DATA, "as_of must be timezone-aware")
+    local = as_of.astimezone(SHANGHAI)
+    candidates = (
+        datetime.combine(local.date(), time.fromisoformat(label), tzinfo=SHANGHAI)
+        for label in SYSTEM_END_TIMES["60m"]
+    )
+    completed = tuple(value for value in candidates if value <= local)
+    if not completed:
+        raise TrendMonitorError(
+            ErrorCategory.DATA_INCOMPLETE,
+            "no completed 60m monitoring period at provider observation time",
+        )
+    return completed[-1]
+
+
 def build_completed_system_bars(
     records: Iterable[MarketRecord],
     *,

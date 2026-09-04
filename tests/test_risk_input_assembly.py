@@ -241,6 +241,29 @@ class RiskInputAssemblyTests(unittest.TestCase):
         self.assertEqual(risk.preflight_status, PreflightStatus.BLOCKED)
         self.assertEqual(risk.data_status, RiskInputDataStatus.DATA_INCOMPLETE)
 
+    def test_closing_bucket_waits_for_provider_without_changing_period_end(self):
+        for period, incomplete_count, complete_count in (("15m", 15, 16), ("60m", 3, 4)):
+            with self.subTest(period=period):
+                records = source_records(period)
+                waiting = self.assembler.assemble_minute(
+                    result_for(period, records[:-1]),
+                    asset_type=AssetType.STOCK,
+                    period=period,
+                    as_of=datetime.fromisoformat("2026-08-28T15:00:00+08:00"),
+                    trading_date="2026-08-28",
+                )
+                ready = self.assembler.assemble_minute(
+                    result_for(period, records),
+                    asset_type=AssetType.STOCK,
+                    period=period,
+                    as_of=datetime.fromisoformat("2026-08-28T15:00:00+08:00"),
+                    trading_date="2026-08-28",
+                )
+                self.assertEqual(len(waiting.system_bars), incomplete_count)
+                self.assertEqual(waiting.preflight_status, PreflightStatus.BLOCKED)
+                self.assertEqual(len(ready.system_bars), complete_count)
+                self.assertEqual(ready.last_completed_bar_end, "2026-08-28T15:00:00+08:00")
+
     def test_missing_source_trace_and_lineage_are_blocked(self):
         records = tuple(replace(item, source_trace=None) for item in source_records("60m"))
         risk = self.assembler.assemble_minute(
@@ -333,6 +356,38 @@ class RiskInputAssemblyTests(unittest.TestCase):
             requested_provider="longbridge",
         )
         self.assertEqual(requested_counts, {"60m": 11, "15m": 35})
+
+    def test_service_reuses_preloaded_minute_snapshot_without_refetch(self):
+        class PreloadedMarketData:
+            registry = InstrumentRegistry.load(ROOT / "config" / "instruments.json")
+
+            def get_daily(self, *args, **kwargs):
+                return daily_result()
+
+            def get_bars(self, *args, **kwargs):
+                raise AssertionError("preloaded minute data must not be fetched again")
+
+        minute_results = {
+            period: result_for(period, source_records(period))
+            for period in ("15m", "60m")
+        }
+        service = RiskInputService(
+            PreloadedMarketData(), RiskFeatureContract.load(CONTRACT)
+        )
+        bundle = service.build_bundle(
+            "stock.hengtong_optic",
+            as_of=self.as_of,
+            requested_provider="longbridge",
+            minute_results=minute_results,
+        )
+        self.assertEqual(
+            bundle.risk_60m.source_trace.raw_path,
+            minute_results["60m"].metadata.raw_path,
+        )
+        self.assertEqual(
+            bundle.support_15m.source_trace.raw_path,
+            minute_results["15m"].metadata.raw_path,
+        )
 
     def test_known_runtime_anomalies_disable_fields_not_close(self):
         cases = (

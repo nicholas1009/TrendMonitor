@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from typing import Mapping
 from zoneinfo import ZoneInfo
 
 from trend_monitor.errors import ErrorCategory, TrendMonitorError
@@ -13,6 +14,7 @@ from trend_monitor.schemas import (
     InstrumentRiskInputBundle,
     PreflightStatus,
     RiskInputDataStatus,
+    ProviderDataResult,
 )
 from trend_monitor.services.market_data import MarketDataService
 
@@ -33,6 +35,7 @@ class RiskInputService:
         as_of: datetime,
         requested_provider: str,
         fallback_providers: tuple[str, ...] = (),
+        minute_results: Mapping[str, ProviderDataResult] | None = None,
     ) -> InstrumentRiskInputBundle:
         if as_of.tzinfo is None:
             raise TrendMonitorError(ErrorCategory.INVALID_DATA, "as_of must be timezone-aware")
@@ -70,14 +73,21 @@ class RiskInputService:
                 # the dedicated convention/coverage scripts; an older bad
                 # non-core field must not silently block an otherwise-valid
                 # latest trading day.
-                count = 35 if period == "15m" else 11
-                result = self.market_data.get_bars(
-                    instrument_id,
-                    requested_provider,
-                    period=period,
-                    count=count,
-                    fallback_providers=fallback_providers,
-                )
+                result = (minute_results or {}).get(period)
+                if result is None:
+                    count = 35 if period == "15m" else 11
+                    result = self.market_data.get_bars(
+                        instrument_id,
+                        requested_provider,
+                        period=period,
+                        count=count,
+                        fallback_providers=fallback_providers,
+                    )
+                elif result.metadata.instrument_id != instrument_id:
+                    raise TrendMonitorError(
+                        ErrorCategory.INVALID_DATA,
+                        "preloaded minute result instrument mismatch",
+                    )
                 minute_inputs[period] = self.assembler.assemble_minute(
                     result,
                     asset_type=instrument.asset_type,

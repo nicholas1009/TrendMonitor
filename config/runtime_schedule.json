@@ -10,6 +10,7 @@
   ],
   "buffer_minutes": 3,
   "live_grace_minutes": 10,
+  "closing_live_grace_minutes": 20,
   "launchd_poll_seconds": 60,
   "lock_stale_seconds": 7200,
   "retry": {

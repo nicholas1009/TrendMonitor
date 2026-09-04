@@ -39,7 +39,10 @@ from trend_monitor.risk_input import (  # noqa: E402
 )
 from trend_monitor.schemas import DataType, PreflightStatus, SourceTrace  # noqa: E402
 from trend_monitor.services import MarketDataService  # noqa: E402
-from trend_monitor.transformation import build_system_bars  # noqa: E402
+from trend_monitor.transformation import (  # noqa: E402
+    build_system_bars,
+    latest_completed_60m_period_end,
+)
 
 
 SHANGHAI = ZoneInfo("Asia/Shanghai")
@@ -79,14 +82,20 @@ def expected_completed_bars(as_of: datetime) -> tuple[int, int]:
     raise ValueError("no completed 60m monitoring period at as_of")
 
 
-def within_live_readiness_window(as_of: datetime) -> bool:
-    """Match the existing scheduled+10 minute live grace, without adding a loop."""
+def within_live_readiness_window(
+    as_of: datetime,
+    *,
+    live_grace_minutes: int = 10,
+    closing_live_grace_minutes: int = 20,
+) -> bool:
+    """Classify provider readiness within the finite per-boundary live grace."""
 
     clock = as_of.astimezone(SHANGHAI).timetz().replace(tzinfo=None)
     for boundary in (time(10, 30), time(11, 30), time(14, 0), time(15, 0)):
         end = datetime.combine(as_of.date(), boundary, tzinfo=SHANGHAI)
         scheduled = end + timedelta(minutes=3)
-        if scheduled.time() <= clock <= (scheduled + timedelta(minutes=10)).time():
+        grace = closing_live_grace_minutes if boundary == time(15, 0) else live_grace_minutes
+        if scheduled.time() <= clock <= (scheduled + timedelta(minutes=grace)).time():
             return True
     return False
 
@@ -110,19 +119,52 @@ def provenance_ok(bundle) -> bool:
             return False
         if any(not bar.source_raw_paths or not bar.source_bar_ids for bar in item.system_bars):
             return False
-        features = (*item.feature_inputs, *item.degraded_features, *item.disabled_features)
+        # Disabled features may legitimately have no contributing bars (for
+        # example previous-period features at 10:30). Only features carrying
+        # a usable value require lineage.
+        features = (*item.feature_inputs, *item.degraded_features)
         if any(not feature.lineage for feature in features):
             return False
     return True
 
 
+def risk_input_block_reasons(
+    bundle,
+    *,
+    expected_15m: int,
+    expected_60m: int,
+    fields_ok: bool,
+    trace_ok: bool,
+    replay_ok: bool,
+) -> tuple[str, ...]:
+    reasons = []
+    if bundle.preflight_status is PreflightStatus.BLOCKED:
+        reasons.append("PREFLIGHT_BLOCKED")
+    if len(bundle.support_15m.system_bars) != expected_15m:
+        reasons.append(
+            f"COMPLETED_15M_COUNT:{len(bundle.support_15m.system_bars)}!={expected_15m}"
+        )
+    if len(bundle.risk_60m.system_bars) != expected_60m:
+        reasons.append(
+            f"COMPLETED_60M_COUNT:{len(bundle.risk_60m.system_bars)}!={expected_60m}"
+        )
+    if not fields_ok:
+        reasons.append("FIELD_CONTRACT_FAILED")
+    if not trace_ok:
+        reasons.append("PROVENANCE_FAILED")
+    if not replay_ok:
+        reasons.append("SNAPSHOT_REPLAY_FAILED")
+    return tuple(reasons)
+
+
 def main() -> int:
     args = parse_args()
-    as_of = (
+    provider_observed_at = (
         datetime.fromisoformat(args.as_of).astimezone(SHANGHAI)
         if args.as_of
         else datetime.now(SHANGHAI)
     )
+    as_of = latest_completed_60m_period_end(provider_observed_at)
     expected_15m, expected_60m = expected_completed_bars(as_of)
     today = as_of.date()
     history_start = today - timedelta(days=40)
@@ -145,13 +187,16 @@ def main() -> int:
     service = RiskInputService(market_data, contract)
     store = RiskInputSnapshotStore(PROJECT_ROOT / "data" / "risk_inputs")
     report: dict[str, object] = {
-        "generated_at": as_of.isoformat(),
+        "generated_at": provider_observed_at.isoformat(),
+        "analysis_as_of": as_of.isoformat(),
+        "provider_observed_at": provider_observed_at.isoformat(),
         "timezone": "Asia/Shanghai",
         "history_window": {"start": history_start.isoformat(), "end": history_end.isoformat()},
         "new_indexes": {},
     }
     bundles = {}
     snapshot_paths = {}
+    ready_instruments: set[str] = set()
     failures = 0
     current_bar_shortfalls: list[str] = []
 
@@ -214,6 +259,7 @@ def main() -> int:
             print(f"  QUOTE PASS — rows={len(quote.normalized)}")
             print(f"  DAILY PASS — rows={len(daily.normalized)}")
 
+            refreshed_results = {}
             for period, expected_system_count in (("15m", 16), ("60m", 4)):
                 raw = provider.get_history_candlesticks(
                     expected_symbol,
@@ -247,6 +293,7 @@ def main() -> int:
                     period=period,
                     source_trace=trace,
                 )
+                refreshed_results[period] = market_data.load_cached(entry)
                 source_counts = Counter(source_day(int(record.timestamp / 1000)) for record in records if record.timestamp is not None)
                 records_by_day = {
                     day: tuple(record for record in records if record.timestamp is not None and source_day(int(record.timestamp / 1000)) == day)
@@ -294,19 +341,21 @@ def main() -> int:
                 as_of=as_of,
                 requested_provider="longbridge",
                 fallback_providers=("hithink",),
+                minute_results=refreshed_results,
             )
             snapshot_path = store.save_bundle(bundle)
             replay_ok = store.load(snapshot_path) == bundle.to_dict()
             fields_ok = feature_contract_ok(bundle)
             trace_ok = provenance_ok(bundle)
-            ready = (
-                bundle.preflight_status is not PreflightStatus.BLOCKED
-                and len(bundle.risk_60m.system_bars) == expected_60m
-                and len(bundle.support_15m.system_bars) == expected_15m
-                and fields_ok
-                and trace_ok
-                and replay_ok
+            block_reasons = risk_input_block_reasons(
+                bundle,
+                expected_15m=expected_15m,
+                expected_60m=expected_60m,
+                fields_ok=fields_ok,
+                trace_ok=trace_ok,
+                replay_ok=replay_ok,
             )
+            ready = not block_reasons
             item_report["risk_input"] = {
                 "status": "DEGRADED" if ready else "BLOCKED",
                 "preflight": bundle.preflight_status.value,
@@ -316,12 +365,14 @@ def main() -> int:
                 "provenance": "PASS" if trace_ok else "FAIL",
                 "snapshot_replay": "PASS" if replay_ok else "FAIL",
                 "snapshot_path": snapshot_path,
+                "block_reasons": list(block_reasons),
             }
             print(
                 f"  RISK INPUT {'DEGRADED' if ready else 'BLOCKED'} — "
                 f"15m={len(bundle.support_15m.system_bars)}; "
                 f"60m={len(bundle.risk_60m.system_bars)}; "
                 f"preflight={bundle.preflight_status.value}"
+                + (f"; block_reason={','.join(block_reasons)}" if block_reasons else "")
             )
             if not ready:
                 failures += 1
@@ -332,6 +383,8 @@ def main() -> int:
                     current_bar_shortfalls.append(instrument_id)
             bundles[instrument_id] = bundle
             snapshot_paths[instrument_id] = snapshot_path
+            if ready:
+                ready_instruments.add(instrument_id)
         except Exception as exc:
             failures += 1
             item_report["failure"] = {"class": type(exc).__name__, "message": str(exc)}
@@ -347,6 +400,7 @@ def main() -> int:
             # all eight indexes.  build_bundle() only fetches the current-day
             # window, which cannot feed the frozen 80-period 15m replay by
             # itself when the replay advances to a new trading day.
+            refreshed_results = {}
             for period in ("15m", "60m"):
                 raw = provider.get_history_candlesticks(
                     mapping.provider_symbol,
@@ -354,7 +408,7 @@ def main() -> int:
                     start=history_start,
                     end=history_end,
                 )
-                cache.save(
+                entry = cache.save(
                     instrument_id=instrument_id,
                     provider="longbridge",
                     provider_symbol=mapping.provider_symbol,
@@ -373,19 +427,24 @@ def main() -> int:
                         * 1000
                     ),
                 )
+                refreshed_results[period] = market_data.load_cached(entry)
             bundle = service.build_bundle(
                 instrument_id,
                 as_of=as_of,
                 requested_provider="longbridge",
                 fallback_providers=("hithink",),
+                minute_results=refreshed_results,
             )
             snapshot_path = store.save_bundle(bundle)
-            ready = (
-                bundle.preflight_status is not PreflightStatus.BLOCKED
-                and len(bundle.risk_60m.system_bars) == expected_60m
-                and len(bundle.support_15m.system_bars) == expected_15m
-                and provenance_ok(bundle)
+            block_reasons = risk_input_block_reasons(
+                bundle,
+                expected_15m=expected_15m,
+                expected_60m=expected_60m,
+                fields_ok=feature_contract_ok(bundle),
+                trace_ok=provenance_ok(bundle),
+                replay_ok=store.load(snapshot_path) == bundle.to_dict(),
             )
+            ready = not block_reasons
             if not ready:
                 failures += 1
                 if (
@@ -395,14 +454,22 @@ def main() -> int:
                     current_bar_shortfalls.append(instrument_id)
             bundles[instrument_id] = bundle
             snapshot_paths[instrument_id] = snapshot_path
-        except Exception:
+            if ready:
+                ready_instruments.add(instrument_id)
+            if not ready:
+                print(
+                    f"{instrument_id} RISK INPUT BLOCKED — "
+                    f"block_reason={','.join(block_reasons)}"
+                )
+        except Exception as exc:
             failures += 1
+            print(f"{instrument_id} RISK INPUT BLOCKED — {type(exc).__name__}: {exc}")
 
     group = build_market_risk_group(
         as_of=as_of.isoformat(),
         registry=registry,
-        bundles=bundles,
-        snapshot_paths=snapshot_paths,
+        bundles={item: bundles[item] for item in ready_instruments},
+        snapshot_paths={item: snapshot_paths[item] for item in ready_instruments},
     )
     group_path = store.save_group(group)
     group_replay = store.load(group_path) == group.to_dict()
@@ -410,8 +477,7 @@ def main() -> int:
     report["market_bundle"] = {
         "coverage": coverage,
         "new_ready": sum(
-            item in bundles
-            and bundles[item].preflight_status is not PreflightStatus.BLOCKED
+            item in ready_instruments
             for item, _, _ in NEW_INDEXES
         ),
         "total_ready": sum(item.status in {"READY", "DEGRADED"} for item in group.entries),
@@ -426,7 +492,7 @@ def main() -> int:
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print("FULL MARKET INDEX COVERAGE")
     print(
-        f"{sum(item in bundles and bundles[item].preflight_status is not PreflightStatus.BLOCKED for item, _, _ in NEW_INDEXES)}/6 NEW"
+        f"{sum(item in ready_instruments for item, _, _ in NEW_INDEXES)}/6 NEW"
     )
     print(f"{sum(item.status in {'READY', 'DEGRADED'} for item in group.entries)}/8 TOTAL")
     print(coverage)
@@ -435,8 +501,8 @@ def main() -> int:
     print(f"EXPECTED COMPLETED BARS — 15m={expected_15m}; 60m={expected_60m}")
     if (
         current_bar_shortfalls
-        and as_of.date() == datetime.now(SHANGHAI).date()
-        and within_live_readiness_window(as_of)
+        and provider_observed_at.date() == datetime.now(SHANGHAI).date()
+        and within_live_readiness_window(provider_observed_at)
     ):
         print(
             "TEMPORARY_PROVIDER_ERROR — completed live bars are not ready for "

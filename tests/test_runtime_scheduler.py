@@ -48,6 +48,7 @@ def periods(at: str, *, historical: bool = False):
         periods=CONFIG.raw["periods"],
         buffer_minutes=3,
         live_grace_minutes=10,
+        closing_live_grace_minutes=20,
         historical_execution=historical,
     )
 
@@ -199,6 +200,15 @@ class ScheduleTests(unittest.TestCase):
 
     def test_1500_resolution(self):
         self.assertEqual([p.period_end[11:16] for p in periods("15:03")], ["10:30", "11:30", "14:00", "15:00"])
+
+    def test_closing_period_uses_independent_provider_grace(self):
+        self.assertEqual(periods("15:14")[-1].execution_mode, "LIVE_SCHEDULED")
+        self.assertEqual(periods("15:23")[-1].execution_mode, "LIVE_SCHEDULED")
+        self.assertEqual(periods("15:24")[-1].execution_mode, "CATCH_UP")
+
+    def test_non_closing_periods_keep_existing_live_grace(self):
+        self.assertEqual(periods("11:43")[-1].execution_mode, "LIVE_SCHEDULED")
+        self.assertEqual(periods("11:44")[-1].execution_mode, "CATCH_UP")
 
     def test_lunch_has_no_extra_period(self):
         self.assertEqual([p.period_end[11:16] for p in periods("13:30")], ["10:30", "11:30"])

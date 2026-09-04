@@ -169,6 +169,9 @@ class RuntimeRunner:
             periods=self.config.raw["periods"],
             buffer_minutes=int(self.config.raw["buffer_minutes"]),
             live_grace_minutes=int(self.config.raw["live_grace_minutes"]),
+            closing_live_grace_minutes=int(
+                self.config.raw.get("closing_live_grace_minutes", self.config.raw["live_grace_minutes"])
+            ),
             historical_execution=no_network,
         ) if trading else ()
         return {
@@ -255,6 +258,9 @@ class RuntimeRunner:
             periods=self.config.raw["periods"],
             buffer_minutes=int(self.config.raw["buffer_minutes"]),
             live_grace_minutes=int(self.config.raw["live_grace_minutes"]),
+            closing_live_grace_minutes=int(
+                self.config.raw.get("closing_live_grace_minutes", self.config.raw["live_grace_minutes"])
+            ),
             historical_execution=historical,
         )
         if not periods:

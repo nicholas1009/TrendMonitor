@@ -86,6 +86,34 @@ def _cached_covering_results(
     return {key: market_data.load_cached(value[1]) for key, value in selected.items()}
 
 
+def _current_market_source_results(
+    cache: RawCache,
+    market_data: MarketDataService,
+    snapshot_store: RiskInputSnapshotStore,
+    coverage: dict[str, object],
+) -> dict[str, ProviderDataResult]:
+    entries_by_path = {
+        str(Path(entry.path).resolve()): entry
+        for entry in cache.entries()
+        if entry.data_type is DataType.KLINE_60M
+    }
+    results = {}
+    market_bundle = coverage.get("market_bundle", {})
+    for item in market_bundle.get("entries", []):
+        snapshot_path = item.get("snapshot_path")
+        if not snapshot_path:
+            continue
+        payload = snapshot_store.load(snapshot_path)
+        raw_path = payload["risk_60m"]["source_trace"].get("raw_path")
+        entry = entries_by_path.get(str(Path(raw_path).resolve())) if raw_path else None
+        if entry is None:
+            raise ValueError(
+                f"current market Raw snapshot is not in cache: {item.get('instrument_id')}"
+            )
+        results[str(item["instrument_id"])] = market_data.load_cached(entry)
+    return results
+
+
 def _cached_merged_stock_60m(
     cache: RawCache,
     market_data: MarketDataService,
@@ -234,12 +262,28 @@ def main() -> int:
         print("HISTORICAL REPLAY\nFAIL — market reference cache incomplete")
         return 1
     market_builder = HistoricalRiskInputBuilder(market_data, assembler, source_market_rules)
-    market_periods = market_builder.build(
+    historical_market_periods = market_builder.build(
         start=start_date,
         end=end_date,
         required_days=82,
         source_results=market_sources,
     )
+    coverage = json.loads(
+        (PROJECT_ROOT / "data" / "reports" / "market_index_coverage_latest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    snapshot_store = RiskInputSnapshotStore(PROJECT_ROOT / "data" / "risk_inputs")
+    current_market_sources = _current_market_source_results(
+        cache, market_data, snapshot_store, coverage
+    )
+    current_market_prefix = market_builder.build_intraday_prefix(
+        as_of=last_end,
+        source_results=current_market_sources,
+    )
+    market_periods = tuple(
+        item for item in historical_market_periods if item.as_of.date() < last_end.date()
+    ) + current_market_prefix
     market_references = _market_reference_periods(market_periods, task8["append_only_replay_path"])
 
     earliest = int((first_end - timedelta(days=100)).timestamp() * 1000)
@@ -390,7 +434,6 @@ def main() -> int:
     latest_risk_input = json.loads(
         (PROJECT_ROOT / "data" / "reports" / "risk_input_latest.json").read_text(encoding="utf-8")
     )
-    snapshot_store = RiskInputSnapshotStore(PROJECT_ROOT / "data" / "risk_inputs")
     source_market60_path = str(task8["current_machine_path"])
     source_market15_path = str(task9["current_machine_path"])
     market60_current = json.loads(Path(source_market60_path).read_text(encoding="utf-8"))

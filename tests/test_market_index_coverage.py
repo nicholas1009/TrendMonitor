@@ -27,6 +27,8 @@ from trend_monitor.schemas import AssetType, PreflightStatus
 from tests.test_risk_input_assembly import result_for, source_records
 from scripts.verify_market_index_coverage import (
     expected_completed_bars,
+    provenance_ok,
+    risk_input_block_reasons,
     within_live_readiness_window,
 )
 
@@ -81,6 +83,64 @@ class MarketIndexCoverageTests(unittest.TestCase):
                 as_of = datetime.fromisoformat(f"2026-09-03T{clock}+08:00")
                 self.assertEqual(expected_completed_bars(as_of), counts)
                 self.assertTrue(within_live_readiness_window(as_of))
+
+    def test_closing_readiness_has_independent_finite_grace(self):
+        self.assertTrue(
+            within_live_readiness_window(
+                datetime.fromisoformat("2026-09-04T15:23:00+08:00")
+            )
+        )
+        self.assertFalse(
+            within_live_readiness_window(
+                datetime.fromisoformat("2026-09-04T15:24:00+08:00")
+            )
+        )
+
+    def test_1030_disabled_previous_features_do_not_fail_provenance(self):
+        as_of = datetime.fromisoformat("2026-08-28T10:30:00+08:00")
+        inputs = {}
+        for period in ("15m", "60m"):
+            records = source_records(
+                period,
+                instrument_id="index.csi500",
+                asset_type=AssetType.INDEX,
+            )
+            inputs[period] = self.assembler.assemble_minute(
+                result_for(period, records),
+                asset_type=AssetType.INDEX,
+                period=period,
+                as_of=as_of,
+                trading_date="2026-08-28",
+            )
+        risk_60m = inputs["60m"]
+        self.assertTrue(any(not item.lineage for item in risk_60m.disabled_features))
+        daily = SimpleNamespace(
+            source_trace=SimpleNamespace(raw_path="/raw/daily.json"),
+            system_bars=(
+                SimpleNamespace(source_raw_paths=("/raw/daily.json",), source_bar_ids=("daily",)),
+            ),
+            feature_inputs=(),
+            degraded_features=(),
+            disabled_features=(),
+        )
+        bundle = SimpleNamespace(
+            daily=daily,
+            risk_60m=risk_60m,
+            support_15m=inputs["15m"],
+            preflight_status=PreflightStatus.PASS_WITH_DEGRADATION,
+        )
+        self.assertTrue(provenance_ok(bundle))
+        self.assertEqual(
+            risk_input_block_reasons(
+                bundle,
+                expected_15m=4,
+                expected_60m=1,
+                fields_ok=True,
+                trace_ok=True,
+                replay_ok=True,
+            ),
+            (),
+        )
 
     def test_six_indexes_apply_existing_system_bar_and_field_contract(self):
         for instrument_id, symbol in NEW_INDEXES.items():

@@ -23,6 +23,7 @@ from trend_monitor.registry import InstrumentRegistry, MappingType  # noqa: E402
 from trend_monitor.risk_input import RiskInputService, RiskInputSnapshotStore  # noqa: E402
 from trend_monitor.schemas import DataType, GroupEntry, PreflightStatus, RiskInputGroup  # noqa: E402
 from trend_monitor.services import MarketDataService  # noqa: E402
+from trend_monitor.transformation import latest_completed_60m_period_end  # noqa: E402
 
 
 SHANGHAI = ZoneInfo("Asia/Shanghai")
@@ -72,7 +73,9 @@ def provenance_check(bundle) -> bool:
         for bar in risk.system_bars:
             if not bar.source_raw_paths or not bar.source_bar_ids:
                 return False
-        for feature in (*risk.feature_inputs, *risk.degraded_features, *risk.disabled_features):
+        # A disabled feature can legitimately have no lineage when its input
+        # does not yet exist (notably previous-period features at 10:30).
+        for feature in (*risk.feature_inputs, *risk.degraded_features):
             if not feature.lineage:
                 return False
     return True
@@ -86,11 +89,12 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    as_of = (
+    provider_observed_at = (
         datetime.fromisoformat(args.as_of).astimezone(SHANGHAI)
         if args.as_of
         else datetime.now(SHANGHAI)
     )
+    as_of = latest_completed_60m_period_end(provider_observed_at)
     registry = InstrumentRegistry.load(PROJECT_ROOT / "config" / "instruments.json")
     contract = RiskFeatureContract.load(PROJECT_ROOT / "config" / "risk_feature_contract.json")
     cache = RawCache(PROJECT_ROOT / "data" / "raw")
@@ -106,7 +110,9 @@ def main() -> int:
     service = RiskInputService(market_data, contract)
     store = RiskInputSnapshotStore(PROJECT_ROOT / "data" / "risk_inputs")
     report = {
-        "generated_at": as_of.isoformat(),
+        "generated_at": provider_observed_at.isoformat(),
+        "analysis_as_of": as_of.isoformat(),
+        "provider_observed_at": provider_observed_at.isoformat(),
         "timezone": "Asia/Shanghai",
         "requested_provider": "longbridge",
         "instruments": {},
@@ -122,8 +128,10 @@ def main() -> int:
     # build_bundle() intentionally fetches only the current-day window.
     history_start = as_of.date() - timedelta(days=130)
     history_end = as_of.date()
+    refreshed_stock_results = {}
     for instrument_id in REAL_INSTRUMENTS[:2]:
         mapping = registry.resolve(instrument_id, "longbridge")
+        refreshed_stock_results[instrument_id] = {}
         for period in ("15m", "60m"):
             raw = longbridge_provider.get_history_candlesticks(
                 mapping.provider_symbol,
@@ -131,7 +139,7 @@ def main() -> int:
                 start=history_start,
                 end=history_end,
             )
-            cache.save(
+            entry = cache.save(
                 instrument_id=instrument_id,
                 provider="longbridge",
                 provider_symbol=mapping.provider_symbol,
@@ -146,6 +154,7 @@ def main() -> int:
                     * 1000
                 ),
             )
+            refreshed_stock_results[instrument_id][period] = market_data.load_cached(entry)
 
     for instrument_id in REAL_INSTRUMENTS:
         print(f"[ASSEMBLE] {instrument_id}")
@@ -154,6 +163,7 @@ def main() -> int:
             as_of=as_of,
             requested_provider="longbridge",
             fallback_providers=("hithink",),
+            minute_results=refreshed_stock_results.get(instrument_id),
         )
         bundles[instrument_id] = bundle
         snapshot_path = store.save_bundle(bundle)
@@ -163,6 +173,19 @@ def main() -> int:
         replay_ok = store.load(snapshot_path) == bundle.to_dict()
         if bundle.preflight_status is PreflightStatus.BLOCKED or not all((field_ok, provenance_ok, replay_ok)):
             failures += 1
+            block_reasons = []
+            if bundle.preflight_status is PreflightStatus.BLOCKED:
+                block_reasons.append("PREFLIGHT_BLOCKED")
+            if not field_ok:
+                block_reasons.append("FIELD_CONTRACT_FAILED")
+            if not provenance_ok:
+                block_reasons.append("PROVENANCE_FAILED")
+            if not replay_ok:
+                block_reasons.append("SNAPSHOT_REPLAY_FAILED")
+            print(
+                f"  RISK INPUT BLOCKED — instrument={instrument_id}; "
+                f"block_reason={','.join(block_reasons)}"
+            )
         print(f"  DAILY FORMAL INPUT: {label(bundle.daily.preflight_status)}")
         print(
             f"  60M SYSTEM INPUT: {label(bundle.risk_60m.preflight_status)} — "
