@@ -1,0 +1,66 @@
+{
+  "entries": [
+    {
+      "adjustment_compatibility": "NO_ADJUST_COMPATIBLE",
+      "data_type": "Daily",
+      "fallback": "hithink",
+      "implementation": "Explicit candidate passed by production verification/risk-input call sites; requested/actual provider and fallback metadata are retained.",
+      "notification_behavior": "NO_DEDICATED_FALLBACK_NOTIFICATION",
+      "primary": "longbridge",
+      "provenance_behavior": "EXPLICIT",
+      "semantic_compatibility": "QUESTION",
+      "status": "QUESTION",
+      "trigger": "Primary provider load failure or unavailable cached result",
+      "unit_compatibility": "DATA_CONFLICT_FOR_VOLUME"
+    },
+    {
+      "adjustment_compatibility": "UNKNOWN",
+      "data_type": "15m/60m",
+      "fallback": "hithink",
+      "implementation": "Hithink adapter does not support minute bars; no effective cross-provider minute fallback exists.",
+      "notification_behavior": "NOT_APPLICABLE",
+      "primary": "longbridge",
+      "provenance_behavior": "NOT_APPLICABLE",
+      "semantic_compatibility": "BLOCKED",
+      "status": "NOT_IMPLEMENTED",
+      "trigger": "NOT_IMPLEMENTED",
+      "unit_compatibility": "UNKNOWN"
+    },
+    {
+      "adjustment_compatibility": "NOT_APPLICABLE",
+      "data_type": "Auction",
+      "fallback": null,
+      "implementation": "No alternate source",
+      "notification_behavior": "RUNTIME_POLICY_UNCHANGED",
+      "primary": "hithink",
+      "provenance_behavior": "EXPLICIT_HITHINK_RAW",
+      "semantic_compatibility": "NOT_APPLICABLE",
+      "status": "BLOCKED",
+      "trigger": "NOT_APPLICABLE",
+      "unit_compatibility": "NOT_APPLICABLE"
+    },
+    {
+      "adjustment_compatibility": "NOT_APPLICABLE",
+      "data_type": "Trading Calendar",
+      "fallback": null,
+      "implementation": "Cached authoritative Hithink calendar; no cross-provider fallback",
+      "notification_behavior": "RUNTIME_POLICY_UNCHANGED",
+      "primary": "hithink",
+      "provenance_behavior": "CACHE_METADATA_RETAINED",
+      "semantic_compatibility": "NOT_APPLICABLE",
+      "status": "BLOCKED",
+      "trigger": "NOT_APPLICABLE",
+      "unit_compatibility": "NOT_APPLICABLE"
+    }
+  ],
+  "formal_cross_provider_fallbacks_allowed": [],
+  "required_resolution": "Formally approve or block the implemented Daily Hithink fallback after resolving unit and field semantics.",
+  "same_provider_transport_retry": {
+    "behavior": "One SDK-context recreation/retry for a network error",
+    "classified_as_source_fallback": false,
+    "provider": "longbridge"
+  },
+  "schema_version": 1,
+  "silent_fallback_found": false,
+  "status": "PARTIAL"
+}

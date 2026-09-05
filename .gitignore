@@ -40,6 +40,13 @@ research/600150/historical_breakout_events.csv
 research/600150/position_thesis_*.json
 research/600150/position_thesis_*.md
 
+# Local-only production source traces and raw-derived unit evidence
+audit/data_source_contract/traces/
+audit/data_source_contract/local_evidence/
+audit/data_source_contract/production_source_trace_summary.json
+audit/data_source_contract/volume_unit_contract.json
+audit/data_source_contract/volume_unit_contract.md
+
 # macOS and IDE
 .DS_Store
 .idea/
