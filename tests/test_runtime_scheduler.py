@@ -307,13 +307,44 @@ class LockRetryTests(unittest.TestCase):
 
         error = raised.exception
         command = run.call_args.args[0]
-        self.assertEqual(command[-2:], ["--as-of", as_of.isoformat()])
+        self.assertEqual(command[-4:-2], ["--as-of", as_of.isoformat()])
+        self.assertEqual(command[-2], "--cycle-id")
+        self.assertTrue(command[-1].startswith(f"intraday:{as_of.isoformat()}:"))
         self.assertEqual(error.exit_code, 1)
         self.assertIsNotNone(error.duration_seconds)
         self.assertEqual(error.stdout_tail, "coverage incomplete")
         self.assertEqual(error.stderr_tail, "provider detail")
         self.assertIn("status=FAILED", stream.getvalue())
         self.assertIn("exit_code=1", stream.getvalue())
+
+    @patch("trend_monitor.runtime.pipeline.subprocess.run")
+    def test_refresh_passes_one_cycle_identity_to_fetch_and_assembly(self, run):
+        raw = deepcopy(CONFIG.raw)
+        raw["pipeline_stages"] = [
+            {
+                "name": "MARKET_DATA_REFRESH",
+                "script": "scripts/verify_market_index_coverage.py",
+            },
+            {
+                "name": "RISK_INPUT_ASSEMBLY",
+                "script": "scripts/verify_risk_input.py",
+            },
+        ]
+        config = RuntimeConfig(raw, project_root=ROOT)
+        run.return_value = type(
+            "Completed", (), {"returncode": 0, "stdout": "PASS", "stderr": ""}
+        )()
+        pipeline = SubprocessMonitorPipeline(
+            ROOT, config, logging.getLogger(f"cycle-{id(self)}"), secrets=()
+        )
+        as_of = datetime(2026, 9, 4, 15, 3, tzinfo=SHANGHAI)
+
+        result = pipeline.refresh(as_of=as_of)
+
+        self.assertEqual(len(result.stages), 2)
+        commands = [item.args[0] for item in run.call_args_list]
+        cycle_ids = [command[command.index("--cycle-id") + 1] for command in commands]
+        self.assertEqual(len(set(cycle_ids)), 1)
 
 
 class StoreSecurityTests(unittest.TestCase):

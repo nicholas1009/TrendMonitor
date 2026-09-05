@@ -3,8 +3,7 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, time, timedelta
 import json
 from pathlib import Path
 from statistics import median
@@ -15,8 +14,7 @@ from zoneinfo import ZoneInfo
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from trend_monitor.cache import CacheStatus, RawCache  # noqa: E402
-from trend_monitor.errors import TrendMonitorError  # noqa: E402
+from trend_monitor.cache import RawCache  # noqa: E402
 from trend_monitor.market_internal import (  # noqa: E402
     Historical15mRiskInputBuilder,
     Market15mInternalEngine,
@@ -56,148 +54,31 @@ from trend_monitor.stock_risk import (  # noqa: E402
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 
 
-def _cached_covering_results(
-    cache: RawCache,
-    market_data: MarketDataService,
-    instrument_ids: tuple[str, ...],
-    *,
-    data_type: DataType,
-    request_start: int,
-    request_end: int,
-) -> dict[str, ProviderDataResult]:
-    selected = {}
-    for order, entry in enumerate(cache.entries()):
-        if (
-            entry.instrument_id not in instrument_ids
-            or entry.provider != "longbridge"
-            or entry.data_type is not data_type
-            or entry.status is CacheStatus.INVALID
-            or entry.request_start is None
-            or entry.request_end is None
-            or entry.request_start > request_start
-            or entry.request_end < request_end
-            or not Path(entry.path).is_file()
-        ):
-            continue
-        current = selected.get(entry.instrument_id)
-        rank = (entry.fetched_at, order)
-        if current is None or rank > current[0]:
-            selected[entry.instrument_id] = (rank, entry)
-    return {key: market_data.load_cached(value[1]) for key, value in selected.items()}
-
-
-def _current_market_source_results(
+def _frozen_snapshot_source_results(
     cache: RawCache,
     market_data: MarketDataService,
     snapshot_store: RiskInputSnapshotStore,
-    coverage: dict[str, object],
+    snapshot_paths: dict[str, str],
+    *,
+    risk_field: str,
+    data_type: DataType,
 ) -> dict[str, ProviderDataResult]:
     entries_by_path = {
         str(Path(entry.path).resolve()): entry
         for entry in cache.entries()
-        if entry.data_type is DataType.KLINE_60M
+        if entry.data_type is data_type
     }
     results = {}
-    market_bundle = coverage.get("market_bundle", {})
-    for item in market_bundle.get("entries", []):
-        snapshot_path = item.get("snapshot_path")
-        if not snapshot_path:
-            continue
+    for instrument_id, snapshot_path in snapshot_paths.items():
         payload = snapshot_store.load(snapshot_path)
-        raw_path = payload["risk_60m"]["source_trace"].get("raw_path")
+        raw_path = payload[risk_field]["source_trace"].get("raw_path")
         entry = entries_by_path.get(str(Path(raw_path).resolve())) if raw_path else None
         if entry is None:
             raise ValueError(
-                f"current market Raw snapshot is not in cache: {item.get('instrument_id')}"
+                f"frozen {risk_field} Raw member is not in cache: {instrument_id}"
             )
-        results[str(item["instrument_id"])] = market_data.load_cached(entry)
+        results[instrument_id] = market_data.load_cached(entry)
     return results
-
-
-def _cached_merged_stock_60m(
-    cache: RawCache,
-    market_data: MarketDataService,
-    instrument_ids: tuple[str, ...],
-    *,
-    earliest: int,
-    latest: int,
-) -> dict[str, ProviderDataResult]:
-    results = {}
-    for instrument_id in instrument_ids:
-        candidates = []
-        for order, entry in enumerate(cache.entries()):
-            if (
-                entry.instrument_id == instrument_id
-                and entry.provider == "longbridge"
-                and entry.data_type is DataType.KLINE_60M
-                and entry.status is not CacheStatus.INVALID
-                and entry.data_start is not None
-                and entry.data_end is not None
-                and entry.data_end >= earliest
-                and entry.data_start <= latest
-                and Path(entry.path).is_file()
-            ):
-                candidates.append((entry.fetched_at, order, entry))
-        if not candidates:
-            continue
-        normalized = {}
-        template = None
-        raw_paths = []
-        for _, _, entry in sorted(candidates):
-            try:
-                loaded = market_data.load_cached(entry)
-            except TrendMonitorError:
-                # Some short current-window evidence intentionally retains an
-                # in-progress/out-of-session source bar. It is not eligible
-                # for the historical System Bar replay and is skipped whole.
-                continue
-            template = loaded
-            raw_paths.append(entry.path)
-            for record in loaded.normalized:
-                if record.timestamp is not None:
-                    normalized[record.timestamp] = record
-        assert template is not None
-        results[instrument_id] = replace(
-            template,
-            normalized=tuple(normalized[key] for key in sorted(normalized)),
-            metadata=replace(
-                template.metadata,
-                source_timestamp=max(normalized),
-                raw_path=raw_paths[-1],
-            ),
-        )
-    return results
-
-
-def _cached_stock_15m(
-    cache: RawCache,
-    market_data: MarketDataService,
-    instrument_ids: tuple[str, ...],
-    *,
-    first_end: datetime,
-    last_end: datetime,
-) -> dict[str, ProviderDataResult]:
-    first_required = int((first_end - timedelta(days=7)).timestamp() * 1000)
-    last_required = int(last_end.timestamp() * 1000)
-    selected = {}
-    for order, entry in enumerate(cache.entries()):
-        if (
-            entry.instrument_id not in instrument_ids
-            or entry.provider != "longbridge"
-            or entry.data_type is not DataType.KLINE_15M
-            or entry.status is CacheStatus.INVALID
-            or entry.data_start is None
-            or entry.data_end is None
-            or entry.data_start > first_required
-            or entry.data_end < last_required
-            or not Path(entry.path).is_file()
-        ):
-            continue
-        current = selected.get(entry.instrument_id)
-        rank = (entry.fetched_at, order)
-        if current is None or rank > current[0]:
-            selected[entry.instrument_id] = (rank, entry)
-    return {key: market_data.load_cached(value[1]) for key, value in selected.items()}
 
 
 def _market_reference_periods(periods, source_replay_id: str):
@@ -244,18 +125,55 @@ def main() -> int:
     adapter = LongbridgeMarketDataAdapter(LongbridgeProvider(dotenv_path=PROJECT_ROOT / ".env"))
     market_data = MarketDataService(registry, (adapter,), cache)
 
-    end_date = datetime.now(SHANGHAI).date()
+    coverage = json.loads(
+        (PROJECT_ROOT / "data" / "reports" / "market_index_coverage_latest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    snapshot_store = RiskInputSnapshotStore(PROJECT_ROOT / "data" / "risk_inputs")
+    latest_risk_input = json.loads(
+        (PROJECT_ROOT / "data" / "reports" / "risk_input_latest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    coverage_cycle = coverage.get("cycle_snapshot", {})
+    input_cycle = latest_risk_input.get("cycle_snapshot", {})
+    cycle_path = coverage_cycle.get("snapshot_path")
+    if not cycle_path or coverage_cycle.get("cycle_raw_snapshot_id") != input_cycle.get(
+        "cycle_raw_snapshot_id"
+    ):
+        print("HISTORICAL REPLAY\nFAIL — Market/Stock cycle Raw snapshot differs")
+        return 1
+    cycle = snapshot_store.load_cycle(cycle_path)
+    market_snapshot_paths = {
+        str(item["instrument_id"]): str(item["snapshot_path"])
+        for item in coverage.get("market_bundle", {}).get("entries", [])
+        if item.get("snapshot_path")
+    }
+    stock_snapshot_paths = {
+        instrument_id: str(latest_risk_input["instruments"][instrument_id]["snapshot_path"])
+        for instrument_id in rules.instrument_ids
+    }
+    cycle_instrument_paths = {**market_snapshot_paths, **stock_snapshot_paths}
+    snapshot_store.require_cycle_members(cycle, cycle_instrument_paths)
+    cycle_contract_ok = (
+        cycle.get("cycle_raw_snapshot_id")
+        == task8.get("cycle_snapshot", {}).get("cycle_raw_snapshot_id")
+        == task9.get("cycle_snapshot", {}).get("cycle_raw_snapshot_id")
+    )
+
+    # Historical Current/Replay inputs are bounded by the scheduled market
+    # period and reload the exact Raw members frozen by this cycle.
+    end_date = last_end.astimezone(SHANGHAI).date()
     start_date = end_date - timedelta(days=130)
-    request_start = int(datetime.combine(start_date, time.min, tzinfo=timezone.utc).timestamp() * 1000)
-    request_end = int(datetime.combine(end_date, time.max, tzinfo=timezone.utc).timestamp() * 1000)
     source_market_rules = Market60mRiskRules.load(PROJECT_ROOT / "config" / "market_60m_risk_rules.json")
-    market_sources = _cached_covering_results(
+    market_sources = _frozen_snapshot_source_results(
         cache,
         market_data,
-        source_market_rules.instrument_ids,
+        snapshot_store,
+        market_snapshot_paths,
+        risk_field="risk_60m",
         data_type=DataType.KLINE_60M,
-        request_start=request_start,
-        request_end=request_end,
     )
     print(f"MARKET 60M RAW CACHE REUSED {len(market_sources)}/8")
     if len(market_sources) != 8:
@@ -268,15 +186,7 @@ def main() -> int:
         required_days=82,
         source_results=market_sources,
     )
-    coverage = json.loads(
-        (PROJECT_ROOT / "data" / "reports" / "market_index_coverage_latest.json").read_text(
-            encoding="utf-8"
-        )
-    )
-    snapshot_store = RiskInputSnapshotStore(PROJECT_ROOT / "data" / "risk_inputs")
-    current_market_sources = _current_market_source_results(
-        cache, market_data, snapshot_store, coverage
-    )
+    current_market_sources = market_sources
     current_market_prefix = market_builder.build_intraday_prefix(
         as_of=last_end,
         source_results=current_market_sources,
@@ -286,13 +196,21 @@ def main() -> int:
     ) + current_market_prefix
     market_references = _market_reference_periods(market_periods, task8["append_only_replay_path"])
 
-    earliest = int((first_end - timedelta(days=100)).timestamp() * 1000)
-    latest = int(last_end.timestamp() * 1000)
-    stock60_sources = _cached_merged_stock_60m(
-        cache, market_data, rules.instrument_ids, earliest=earliest, latest=latest
+    stock60_sources = _frozen_snapshot_source_results(
+        cache,
+        market_data,
+        snapshot_store,
+        stock_snapshot_paths,
+        risk_field="risk_60m",
+        data_type=DataType.KLINE_60M,
     )
-    stock15_sources = _cached_stock_15m(
-        cache, market_data, rules.instrument_ids, first_end=first_end, last_end=last_end
+    stock15_sources = _frozen_snapshot_source_results(
+        cache,
+        market_data,
+        snapshot_store,
+        stock_snapshot_paths,
+        risk_field="support_15m",
+        data_type=DataType.KLINE_15M,
     )
     print(f"STOCK 60M RAW CACHE REUSED {len(stock60_sources)}/2")
     print(f"STOCK 15M RAW CACHE REUSED {len(stock15_sources)}/2")
@@ -346,12 +264,13 @@ def main() -> int:
     market15_rules = Market15mInternalRules.load(
         PROJECT_ROOT / "config" / "market_15m_internal_rules.json"
     )
-    market15_sources = _cached_stock_15m(
+    market15_sources = _frozen_snapshot_source_results(
         cache,
         market_data,
-        source_market_rules.instrument_ids,
-        first_end=datetime.fromisoformat(market60_results[0]["last_completed_bar_end"]),
-        last_end=last_end,
+        snapshot_store,
+        market_snapshot_paths,
+        risk_field="support_15m",
+        data_type=DataType.KLINE_15M,
     )
     print(f"MARKET 15M RAW CACHE REUSED {len(market15_sources)}/8")
     if len(market15_sources) != 8:
@@ -431,9 +350,6 @@ def main() -> int:
     )
     superseded_incomplete = input_store.mark_incomplete_attempts_superseded()
 
-    latest_risk_input = json.loads(
-        (PROJECT_ROOT / "data" / "reports" / "risk_input_latest.json").read_text(encoding="utf-8")
-    )
     source_market60_path = str(task8["current_machine_path"])
     source_market15_path = str(task9["current_machine_path"])
     market60_current = json.loads(Path(source_market60_path).read_text(encoding="utf-8"))
@@ -534,7 +450,10 @@ def main() -> int:
             "superseded_incomplete_input_snapshots": superseded_incomplete,
             "current_paths": current_paths,
             "current_pipeline_match": pipeline_match,
+            "determinism": replay.deterministic and current_deterministic,
             "in_progress_support": [item.to_dict() for item in early_support],
+            "cycle_snapshot": coverage_cycle,
+            "cycle_snapshot_contract": "PASS" if cycle_contract_ok else "FAIL",
         }
     )
     replay_path = output_store.save_replay(
@@ -592,6 +511,7 @@ def main() -> int:
             replay.score_immutable,
             pipeline_match,
             all(item.stock_60m_risk and item.stock_60m_risk.confidence.value == "HIGH" for item in current_monitors.values()),
+            cycle_contract_ok,
         )
     )
     return 0 if success else 1

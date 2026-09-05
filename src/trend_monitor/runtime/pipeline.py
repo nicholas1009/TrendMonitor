@@ -11,6 +11,7 @@ import subprocess
 import sys
 import time
 from typing import Any, Callable
+from uuid import uuid4
 
 from .logging import redact_text
 
@@ -99,6 +100,7 @@ class SubprocessMonitorPipeline:
     def refresh(self, *, as_of: datetime) -> PipelineRefreshResult:
         stages = []
         total_attempts = 0
+        cycle_id = f"intraday:{as_of.isoformat()}:{uuid4().hex}"
         retry = self.config.raw["retry"]
         for definition in self.config.raw["pipeline_stages"]:
             name = definition["name"]
@@ -108,7 +110,9 @@ class SubprocessMonitorPipeline:
                 self.logger.info("stage=%s status=STARTED as_of=%s", name, as_of.isoformat())
                 command = [sys.executable, str(script)]
                 if name in {"MARKET_DATA_REFRESH", "RISK_INPUT_ASSEMBLY"}:
-                    command.extend(["--as-of", as_of.isoformat()])
+                    command.extend(
+                        ["--as-of", as_of.isoformat(), "--cycle-id", cycle_id]
+                    )
                 stage_started = time.monotonic()
                 try:
                     completed = subprocess.run(
@@ -245,6 +249,22 @@ class RuntimeSnapshotReader:
                 for instrument_id in stocks
             },
         }
+        cycle_references = [
+            report.get("cycle_snapshot", {})
+            for report in (market_report, internal_report, stock_report)
+        ]
+        cycle_ids = {
+            item.get("cycle_raw_snapshot_id")
+            for item in cycle_references
+            if item.get("cycle_raw_snapshot_id")
+        }
+        if cycle_ids:
+            if len(cycle_ids) != 1 or any(
+                not item.get("cycle_raw_snapshot_id") for item in cycle_references
+            ):
+                raise ValueError("CYCLE_RAW_SNAPSHOT_ID_MISMATCH")
+            source_ids["cycle_raw_snapshot_id"] = next(iter(cycle_ids))
+            source_ids["cycle_snapshot_path"] = cycle_references[0].get("snapshot_path")
         return {
             "market": market,
             "market_15m": market15,
@@ -255,6 +275,7 @@ class RuntimeSnapshotReader:
                 "market_15m_lookahead": internal_report.get("lookahead_safe") is True,
                 "stock_lookahead": stock_report.get("lookahead_safe") is True,
                 "stock_score_immutable": stock_report.get("score_immutable") is True,
+                "cycle_snapshot": len(cycle_ids) == 1 if cycle_ids else True,
             },
         }
 

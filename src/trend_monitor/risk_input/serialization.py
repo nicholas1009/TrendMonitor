@@ -13,6 +13,7 @@ from trend_monitor.schemas import (
     RiskInput,
     RiskInputDataStatus,
     RiskSourceTrace,
+    InstrumentRiskInputBundle,
 )
 
 
@@ -74,5 +75,20 @@ def risk_input_from_dict(value: dict[str, object]) -> RiskInput:
         layer_role=str(value["layer_role"]),
         in_progress_source_bars=tuple(int(item) for item in value.get("in_progress_source_bars", [])),
         preflight_reasons=tuple(str(item) for item in value.get("preflight_reasons", [])),
+        schema_version=int(value.get("schema_version", 1)),
+    )
+
+
+def instrument_bundle_from_dict(value: dict[str, object]) -> InstrumentRiskInputBundle:
+    return InstrumentRiskInputBundle(
+        instrument_id=str(value["instrument_id"]),
+        asset_type=AssetType(str(value["asset_type"])),
+        as_of=str(value["as_of"]),
+        daily=risk_input_from_dict(dict(value["daily"])),
+        risk_60m=risk_input_from_dict(dict(value["risk_60m"])),
+        support_15m=risk_input_from_dict(dict(value["support_15m"])),
+        data_status=RiskInputDataStatus(str(value["data_status"])),
+        preflight_status=PreflightStatus(str(value["preflight_status"])),
+        reasons=tuple(str(item) for item in value.get("reasons", [])),
         schema_version=int(value.get("schema_version", 1)),
     )

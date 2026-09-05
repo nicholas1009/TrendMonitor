@@ -43,25 +43,46 @@ class RiskInputService:
         local = as_of.astimezone(ZoneInfo("Asia/Shanghai"))
         start = int((local - timedelta(days=160)).timestamp() * 1000)
         end = int(local.timestamp() * 1000)
+        # Data Source Contract v0.1 has not approved Hithink Daily as a
+        # production substitute for canonical Longbridge Daily.  Keep the
+        # generic MarketDataService fallback facility available to explicit
+        # research/cross-validation callers, but block it at the formal Risk
+        # Input boundary until a separate human approval closes every field
+        # semantic (including turnover and missing/null behavior).
+        daily_fallbacks = tuple(
+            item
+            for item in fallback_providers
+            if not (
+                requested_provider.lower() == "longbridge"
+                and item.lower() == "hithink"
+            )
+        )
+        hithink_daily_blocked = (
+            requested_provider.lower() == "longbridge"
+            and any(item.lower() == "hithink" for item in fallback_providers)
+        )
         try:
             daily_result = self.market_data.get_daily(
                 instrument_id,
                 requested_provider,
                 start=start,
                 end=end,
-                fallback_providers=fallback_providers,
+                fallback_providers=daily_fallbacks,
             )
             daily = self.assembler.assemble_daily(
                 daily_result, asset_type=instrument.asset_type, as_of=local
             )
         except TrendMonitorError as exc:
+            reason = f"{exc.category.value}:{exc.message}"
+            if hithink_daily_blocked:
+                reason += ";HITHINK_DAILY_FALLBACK_BLOCKED_PENDING_CONTRACT_VALIDATION"
             daily = self.assembler.blocked(
                 instrument_id=instrument_id,
                 asset_type=instrument.asset_type,
                 period=AnalysisPeriod.DAILY,
                 as_of=local,
                 requested_provider=requested_provider,
-                reason=f"{exc.category.value}:{exc.message}",
+                reason=reason,
             )
         minute_inputs = {}
         for period, analysis_period in (("60m", AnalysisPeriod.MIN_60), ("15m", AnalysisPeriod.MIN_15)):

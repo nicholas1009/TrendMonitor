@@ -116,6 +116,13 @@ class RuntimeRunner:
         source_ids = source_ids or {}
         record_extra = dict(self.invocation_metadata)
         record_extra.update(extra or {})
+        if source_ids.get("cycle_raw_snapshot_id"):
+            record_extra["cycle_raw_snapshot_id"] = source_ids[
+                "cycle_raw_snapshot_id"
+            ]
+            record_extra["cycle_snapshot_path"] = source_ids.get(
+                "cycle_snapshot_path"
+            )
         record = RuntimeRunRecord(
             run_id=run_id,
             scheduled_period=scheduled_period.to_dict() if scheduled_period else None,

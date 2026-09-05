@@ -37,11 +37,29 @@ class DataSourceContractAuditTests(unittest.TestCase):
         self.assertEqual(summary["all"]["percent"], 100.0)
         self.assertEqual(len(self.first["period_traces"]), 8)
 
-    def test_volume_unit_contract_remains_data_conflict(self) -> None:
+    def test_volume_unit_contract_is_confirmed_by_dimensional_invariant(self) -> None:
         contract = self.first["volume"]
-        self.assertEqual(contract["status"], "DATA_CONFLICT")
-        self.assertEqual(contract["conversion_location"], "NONE")
-        self.assertFalse(contract["auto_normalization_allowed"])
+        self.assertEqual(contract["status"], "CONFIRMED_EMPIRICALLY")
+        self.assertEqual(
+            contract["evidence_type"],
+            "EMPIRICALLY_CONFIRMED_BY_DIMENSIONAL_INVARIANT",
+        )
+        self.assertEqual(
+            contract["longbridge_cn_volume_scale"], "100_SHARES_PER_RAW_UNIT"
+        )
+        self.assertTrue(contract["auto_normalization_allowed"])
+        self.assertFalse(contract["unknown_unit_auto_normalization_allowed"])
+        self.assertTrue(
+            all(
+                not item["longbridge_invariant"]["factor_1_valid"]
+                and item["longbridge_invariant"]["factor_100_valid"]
+                for item in contract["samples"]
+            )
+        )
+        self.assertEqual(
+            contract["post_audit_resolution_600150"]["status"],
+            "PASS_AFTER_UNIT_NORMALIZATION",
+        )
 
     def test_unknown_unit_must_not_auto_normalize(self) -> None:
         self.assertIsNone(
@@ -77,7 +95,7 @@ class DataSourceContractAuditTests(unittest.TestCase):
         self.assertFalse(disabled["lineage_required"])
         self.assertEqual(disabled["status"], "PASS")
 
-    def test_snapshot_identity_is_present_and_stable(self) -> None:
+    def test_legacy_snapshot_identity_is_preserved_and_new_contract_passes(self) -> None:
         first = [item["snapshot_identity"] for item in self.first["period_traces"]]
         second = [item["snapshot_identity"] for item in self.second["period_traces"]]
         self.assertEqual(first, second)
@@ -96,6 +114,11 @@ class DataSourceContractAuditTests(unittest.TestCase):
                 if item["period"].startswith("2026-09-04")
             )
         )
+        self.assertEqual(self.first["snapshot"]["status"], "PASS")
+        self.assertEqual(
+            self.first["snapshot"]["legacy_2026_09_03_1500"],
+            "LEGACY_SNAPSHOT_IDENTITY_MISMATCH",
+        )
 
     def test_analysis_as_of_semantics(self) -> None:
         for trace in self.first["period_traces"]:
@@ -104,9 +127,33 @@ class DataSourceContractAuditTests(unittest.TestCase):
 
     def test_fallback_policy_audit(self) -> None:
         fallback = self.first["fallback"]
-        self.assertEqual(fallback["status"], "PARTIAL")
+        self.assertEqual(fallback["status"], "CONFIRMED_BLOCKED")
         self.assertFalse(fallback["silent_fallback_found"])
         self.assertEqual(fallback["formal_cross_provider_fallbacks_allowed"], [])
+        self.assertEqual(
+            fallback["entries"][0]["status"],
+            "BLOCKED_PENDING_CONTRACT_VALIDATION",
+        )
+        self.assertEqual(fallback["research_hithink_daily"], "ALLOWED_EXPLICITLY")
+
+    def test_timezone_contract_is_confirmed_by_controlled_epoch_invariant(self) -> None:
+        timezone_contract = self.first["timezone"]
+        self.assertEqual(timezone_contract["status"], "PASS")
+        self.assertEqual(
+            timezone_contract["longbridge_naive_datetime_semantic"], "CONFIRMED"
+        )
+        self.assertTrue(
+            all(item["status"] == "PASS" for item in timezone_contract["pair_checks"])
+        )
+
+    def test_task_025_and_risk_results_do_not_regress(self) -> None:
+        regression = self.first["regression"]
+        self.assertEqual(regression["status"], "PASS")
+        self.assertEqual(regression["current_replay_match"], "PASS")
+        self.assertEqual(regression["determinism"], "PASS")
+        self.assertEqual(regression["lookahead"], "PASS")
+        self.assertEqual(regression["disabled_previous_period_provenance"], "PASS")
+        self.assertEqual(regression["period_end_1500"], "PASS")
 
     def test_audit_output_is_deterministic(self) -> None:
         self.assertEqual(

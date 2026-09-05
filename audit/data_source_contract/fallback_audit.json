@@ -4,14 +4,14 @@
       "adjustment_compatibility": "NO_ADJUST_COMPATIBLE",
       "data_type": "Daily",
       "fallback": "hithink",
-      "implementation": "Explicit candidate passed by production verification/risk-input call sites; requested/actual provider and fallback metadata are retained.",
-      "notification_behavior": "NO_DEDICATED_FALLBACK_NOTIFICATION",
+      "implementation": "The production RiskInputService filters Hithink from the Daily fallback candidates when Longbridge is requested and records an explicit block reason.",
+      "notification_behavior": "EXISTING_RUNTIME_ERROR_POLICY",
       "primary": "longbridge",
-      "provenance_behavior": "EXPLICIT",
-      "semantic_compatibility": "QUESTION",
-      "status": "QUESTION",
-      "trigger": "Primary provider load failure or unavailable cached result",
-      "unit_compatibility": "DATA_CONFLICT_FOR_VOLUME"
+      "provenance_behavior": "EXPLICIT_BLOCK_REASON",
+      "semantic_compatibility": "BLOCKED_PENDING_CONTRACT_VALIDATION",
+      "status": "BLOCKED_PENDING_CONTRACT_VALIDATION",
+      "trigger": "Longbridge Daily unavailable -> existing DATA_NOT_READY/DATA_INCOMPLETE path",
+      "unit_compatibility": "VOLUME_NORMALIZATION_CONFIRMED_BUT_NOT_SUFFICIENT_FOR_PROVIDER_APPROVAL"
     },
     {
       "adjustment_compatibility": "UNKNOWN",
@@ -54,7 +54,8 @@
     }
   ],
   "formal_cross_provider_fallbacks_allowed": [],
-  "required_resolution": "Formally approve or block the implemented Daily Hithink fallback after resolving unit and field semantics.",
+  "required_resolution": "A separate versioned contract validation and human approval are required before any production Hithink Daily fallback can be enabled.",
+  "research_hithink_daily": "ALLOWED_EXPLICITLY",
   "same_provider_transport_retry": {
     "behavior": "One SDK-context recreation/retry for a network error",
     "classified_as_source_fallback": false,
@@ -62,5 +63,5 @@
   },
   "schema_version": 1,
   "silent_fallback_found": false,
-  "status": "PARTIAL"
+  "status": "CONFIRMED_BLOCKED"
 }

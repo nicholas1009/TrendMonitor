@@ -1,8 +1,8 @@
 {
-  "fallback_contract": "PARTIAL",
+  "fallback_contract": "CONFIRMED_BLOCKED",
   "production_change": {
-    "observability": false,
-    "provider_selection": false,
+    "observability": true,
+    "provider_selection": true,
     "risk_rules": false,
     "runtime": false
   },
@@ -118,7 +118,7 @@
       "current_status": "CONFIRMED",
       "data_type": "Daily",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "BLOCKED_PENDING_CONTRACT_VALIDATION",
       "field": "open",
       "market_time_semantics": "trade_date",
       "provenance_required": true,
@@ -133,7 +133,7 @@
       "current_status": "CONFIRMED",
       "data_type": "Daily",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "BLOCKED_PENDING_CONTRACT_VALIDATION",
       "field": "high",
       "market_time_semantics": "trade_date",
       "provenance_required": true,
@@ -148,7 +148,7 @@
       "current_status": "CONFIRMED",
       "data_type": "Daily",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "BLOCKED_PENDING_CONTRACT_VALIDATION",
       "field": "low",
       "market_time_semantics": "trade_date",
       "provenance_required": true,
@@ -163,7 +163,7 @@
       "current_status": "CONFIRMED",
       "data_type": "Daily",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "BLOCKED_PENDING_CONTRACT_VALIDATION",
       "field": "close",
       "market_time_semantics": "trade_date",
       "provenance_required": true,
@@ -175,16 +175,16 @@
     {
       "adjustment": "NoAdjust/actual",
       "canonical_source": "longbridge",
-      "current_status": "DATA_CONFLICT",
+      "current_status": "CONFIRMED_EMPIRICALLY",
       "data_type": "Daily",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "BLOCKED_PENDING_CONTRACT_VALIDATION",
       "field": "volume",
       "market_time_semantics": "trade_date",
       "provenance_required": true,
       "provider_observed_time_semantics": "raw cache fetch time",
       "timezone": "Asia/Shanghai trading-date mapping",
-      "unit": "UNKNOWN",
+      "unit": "shares (Longbridge CN raw x100)",
       "validation_source": "local validation/replay; Hithink cross-check is research only"
     },
     {
@@ -193,7 +193,7 @@
       "current_status": "UNKNOWN",
       "data_type": "Daily",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "BLOCKED_PENDING_CONTRACT_VALIDATION",
       "field": "turnover",
       "market_time_semantics": "trade_date",
       "provenance_required": true,
@@ -205,31 +205,31 @@
     {
       "adjustment": "NoAdjust/actual",
       "canonical_source": "longbridge",
-      "current_status": "PROVISIONAL",
+      "current_status": "CONFIRMED_EMPIRICALLY",
       "data_type": "Daily",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "BLOCKED_PENDING_CONTRACT_VALIDATION",
       "field": "timestamp",
       "market_time_semantics": "trade_date",
       "provenance_required": true,
       "provider_observed_time_semantics": "raw cache fetch time",
       "timezone": "Asia/Shanghai trading-date mapping",
-      "unit": "UNKNOWN",
+      "unit": "Unix epoch; aware Asia/Shanghai market_time",
       "validation_source": "local validation/replay; Hithink cross-check is research only"
     },
     {
       "adjustment": "NoAdjust/actual",
       "canonical_source": "longbridge",
-      "current_status": "PROVISIONAL",
+      "current_status": "CONFIRMED_EMPIRICALLY",
       "data_type": "Daily",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "BLOCKED_PENDING_CONTRACT_VALIDATION",
       "field": "trade_date",
       "market_time_semantics": "trade_date",
       "provenance_required": true,
       "provider_observed_time_semantics": "raw cache fetch time",
       "timezone": "Asia/Shanghai trading-date mapping",
-      "unit": "UNKNOWN",
+      "unit": "Asia/Shanghai calendar date",
       "validation_source": "local validation/replay; Hithink cross-check is research only"
     },
     {
@@ -238,7 +238,7 @@
       "current_status": "CONFIRMED",
       "data_type": "15m",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "NOT_IMPLEMENTED",
       "field": "open",
       "market_time_semantics": "completed bar end/quote time",
       "provenance_required": true,
@@ -253,7 +253,7 @@
       "current_status": "CONFIRMED",
       "data_type": "15m",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "NOT_IMPLEMENTED",
       "field": "high",
       "market_time_semantics": "completed bar end/quote time",
       "provenance_required": true,
@@ -268,7 +268,7 @@
       "current_status": "CONFIRMED",
       "data_type": "15m",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "NOT_IMPLEMENTED",
       "field": "low",
       "market_time_semantics": "completed bar end/quote time",
       "provenance_required": true,
@@ -283,7 +283,7 @@
       "current_status": "CONFIRMED",
       "data_type": "15m",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "NOT_IMPLEMENTED",
       "field": "close",
       "market_time_semantics": "completed bar end/quote time",
       "provenance_required": true,
@@ -295,16 +295,16 @@
     {
       "adjustment": "NoAdjust/actual",
       "canonical_source": "longbridge",
-      "current_status": "UNKNOWN",
+      "current_status": "CONFIRMED_EMPIRICALLY",
       "data_type": "15m",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "NOT_IMPLEMENTED",
       "field": "volume",
       "market_time_semantics": "completed bar end/quote time",
       "provenance_required": true,
       "provider_observed_time_semantics": "raw cache fetch time",
       "timezone": "Asia/Shanghai trading-date mapping",
-      "unit": "UNKNOWN",
+      "unit": "shares (Longbridge CN raw x100)",
       "validation_source": "local validation/replay; Hithink cross-check is research only"
     },
     {
@@ -313,7 +313,7 @@
       "current_status": "UNKNOWN",
       "data_type": "15m",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "NOT_IMPLEMENTED",
       "field": "turnover",
       "market_time_semantics": "completed bar end/quote time",
       "provenance_required": true,
@@ -325,16 +325,16 @@
     {
       "adjustment": "NoAdjust/actual",
       "canonical_source": "longbridge",
-      "current_status": "PROVISIONAL",
+      "current_status": "CONFIRMED_EMPIRICALLY",
       "data_type": "15m",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "NOT_IMPLEMENTED",
       "field": "bar_end",
       "market_time_semantics": "completed bar end/quote time",
       "provenance_required": true,
       "provider_observed_time_semantics": "raw cache fetch time",
       "timezone": "Asia/Shanghai trading-date mapping",
-      "unit": "UNKNOWN",
+      "unit": "timezone-aware Asia/Shanghai datetime",
       "validation_source": "local validation/replay; Hithink cross-check is research only"
     },
     {
@@ -343,7 +343,7 @@
       "current_status": "CONFIRMED",
       "data_type": "60m",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "NOT_IMPLEMENTED",
       "field": "open",
       "market_time_semantics": "completed bar end/quote time",
       "provenance_required": true,
@@ -358,7 +358,7 @@
       "current_status": "CONFIRMED",
       "data_type": "60m",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "NOT_IMPLEMENTED",
       "field": "high",
       "market_time_semantics": "completed bar end/quote time",
       "provenance_required": true,
@@ -373,7 +373,7 @@
       "current_status": "CONFIRMED",
       "data_type": "60m",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "NOT_IMPLEMENTED",
       "field": "low",
       "market_time_semantics": "completed bar end/quote time",
       "provenance_required": true,
@@ -388,7 +388,7 @@
       "current_status": "CONFIRMED",
       "data_type": "60m",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "NOT_IMPLEMENTED",
       "field": "close",
       "market_time_semantics": "completed bar end/quote time",
       "provenance_required": true,
@@ -400,16 +400,16 @@
     {
       "adjustment": "NoAdjust/actual",
       "canonical_source": "longbridge",
-      "current_status": "UNKNOWN",
+      "current_status": "CONFIRMED_EMPIRICALLY",
       "data_type": "60m",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "NOT_IMPLEMENTED",
       "field": "volume",
       "market_time_semantics": "completed bar end/quote time",
       "provenance_required": true,
       "provider_observed_time_semantics": "raw cache fetch time",
       "timezone": "Asia/Shanghai trading-date mapping",
-      "unit": "UNKNOWN",
+      "unit": "shares (Longbridge CN raw x100)",
       "validation_source": "local validation/replay; Hithink cross-check is research only"
     },
     {
@@ -418,7 +418,7 @@
       "current_status": "UNKNOWN",
       "data_type": "60m",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "NOT_IMPLEMENTED",
       "field": "turnover",
       "market_time_semantics": "completed bar end/quote time",
       "provenance_required": true,
@@ -430,16 +430,16 @@
     {
       "adjustment": "NoAdjust/actual",
       "canonical_source": "longbridge",
-      "current_status": "PROVISIONAL",
+      "current_status": "CONFIRMED_EMPIRICALLY",
       "data_type": "60m",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "NOT_IMPLEMENTED",
       "field": "bar_end",
       "market_time_semantics": "completed bar end/quote time",
       "provenance_required": true,
       "provider_observed_time_semantics": "raw cache fetch time",
       "timezone": "Asia/Shanghai trading-date mapping",
-      "unit": "UNKNOWN",
+      "unit": "timezone-aware Asia/Shanghai datetime",
       "validation_source": "local validation/replay; Hithink cross-check is research only"
     },
     {
@@ -448,7 +448,7 @@
       "current_status": "CONFIRMED_CAPABILITY_RESEARCH_NOT_FORMAL_RISK_INPUT",
       "data_type": "Latest Quote",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "NOT_APPLICABLE_RESEARCH_CAPABILITY",
       "field": "last",
       "market_time_semantics": "completed bar end/quote time",
       "provenance_required": true,
@@ -463,7 +463,7 @@
       "current_status": "CONFIRMED_CAPABILITY_RESEARCH_NOT_FORMAL_RISK_INPUT",
       "data_type": "Latest Quote",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "NOT_APPLICABLE_RESEARCH_CAPABILITY",
       "field": "open",
       "market_time_semantics": "completed bar end/quote time",
       "provenance_required": true,
@@ -478,7 +478,7 @@
       "current_status": "CONFIRMED_CAPABILITY_RESEARCH_NOT_FORMAL_RISK_INPUT",
       "data_type": "Latest Quote",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "NOT_APPLICABLE_RESEARCH_CAPABILITY",
       "field": "high",
       "market_time_semantics": "completed bar end/quote time",
       "provenance_required": true,
@@ -493,7 +493,7 @@
       "current_status": "CONFIRMED_CAPABILITY_RESEARCH_NOT_FORMAL_RISK_INPUT",
       "data_type": "Latest Quote",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "NOT_APPLICABLE_RESEARCH_CAPABILITY",
       "field": "low",
       "market_time_semantics": "completed bar end/quote time",
       "provenance_required": true,
@@ -508,7 +508,7 @@
       "current_status": "CONFIRMED_CAPABILITY_RESEARCH_NOT_FORMAL_RISK_INPUT",
       "data_type": "Latest Quote",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "NOT_APPLICABLE_RESEARCH_CAPABILITY",
       "field": "prev_close",
       "market_time_semantics": "completed bar end/quote time",
       "provenance_required": true,
@@ -520,16 +520,16 @@
     {
       "adjustment": "NOT_APPLICABLE",
       "canonical_source": "longbridge",
-      "current_status": "UNKNOWN",
+      "current_status": "CONFIRMED_EMPIRICALLY",
       "data_type": "Latest Quote",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "NOT_APPLICABLE_RESEARCH_CAPABILITY",
       "field": "volume",
       "market_time_semantics": "completed bar end/quote time",
       "provenance_required": true,
       "provider_observed_time_semantics": "raw cache fetch time",
       "timezone": "Asia/Shanghai trading-date mapping",
-      "unit": "UNKNOWN",
+      "unit": "shares (Longbridge CN raw x100)",
       "validation_source": "local validation/replay; Hithink cross-check is research only"
     },
     {
@@ -538,7 +538,7 @@
       "current_status": "UNKNOWN",
       "data_type": "Latest Quote",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "NOT_APPLICABLE_RESEARCH_CAPABILITY",
       "field": "turnover",
       "market_time_semantics": "completed bar end/quote time",
       "provenance_required": true,
@@ -550,16 +550,16 @@
     {
       "adjustment": "NOT_APPLICABLE",
       "canonical_source": "longbridge",
-      "current_status": "PROVISIONAL",
+      "current_status": "CONFIRMED_EMPIRICALLY",
       "data_type": "Latest Quote",
       "evidence": "2026-09-03/04 production traces and official Longbridge field schema",
-      "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
+      "fallback_policy": "NOT_APPLICABLE_RESEARCH_CAPABILITY",
       "field": "timestamp",
       "market_time_semantics": "completed bar end/quote time",
       "provenance_required": true,
       "provider_observed_time_semantics": "raw cache fetch time",
       "timezone": "Asia/Shanghai trading-date mapping",
-      "unit": "UNKNOWN",
+      "unit": "Unix epoch; aware Asia/Shanghai market_time",
       "validation_source": "local validation/replay; Hithink cross-check is research only"
     },
     {
@@ -729,7 +729,8 @@
     }
   ],
   "schema_version": 1,
-  "status": "PARTIAL",
+  "snapshot_contract": "PASS",
+  "status": "COMPLETE",
   "summary": {
     "all": {
       "percent": 100.0,
@@ -833,6 +834,220 @@
     },
     "successful_runtime_samples": 8
   },
+  "task_028_resolution": {
+    "fallback": "CONFIRMED_BLOCKED",
+    "risk_result_regression": {
+      "current_replay_match": "PASS",
+      "determinism": "PASS",
+      "disabled_previous_period_provenance": "PASS",
+      "lookahead": "PASS",
+      "market": {
+        "2026-09-04T10:30:00+08:00": {
+          "risk_light": "GREEN",
+          "risk_score": 0
+        },
+        "2026-09-04T11:30:00+08:00": {
+          "risk_light": "YELLOW",
+          "risk_score": 3
+        },
+        "2026-09-04T14:00:00+08:00": {
+          "risk_light": "ORANGE",
+          "risk_score": 5
+        },
+        "2026-09-04T15:00:00+08:00": {
+          "risk_light": "ORANGE",
+          "risk_score": 5
+        }
+      },
+      "period_end_1500": "PASS",
+      "schema_version": 1,
+      "status": "PASS",
+      "stocks": {
+        "stock.hengtong_optic": {
+          "2026-09-04T10:30:00+08:00": {
+            "risk_light": "YELLOW",
+            "risk_score": 1
+          },
+          "2026-09-04T11:30:00+08:00": {
+            "risk_light": "YELLOW",
+            "risk_score": 2
+          },
+          "2026-09-04T14:00:00+08:00": {
+            "risk_light": "YELLOW",
+            "risk_score": 2
+          },
+          "2026-09-04T15:00:00+08:00": {
+            "risk_light": "YELLOW",
+            "risk_score": 2
+          }
+        },
+        "stock.wus_printed_circuit": {
+          "2026-09-04T10:30:00+08:00": {
+            "risk_light": "YELLOW",
+            "risk_score": 2
+          },
+          "2026-09-04T11:30:00+08:00": {
+            "risk_light": "YELLOW",
+            "risk_score": 2
+          },
+          "2026-09-04T14:00:00+08:00": {
+            "risk_light": "YELLOW",
+            "risk_score": 2
+          },
+          "2026-09-04T15:00:00+08:00": {
+            "risk_light": "YELLOW",
+            "risk_score": 2
+          }
+        }
+      }
+    },
+    "snapshot": {
+      "analysis_as_of": "2026-09-04T15:00:00+08:00",
+      "current_replay_match": {
+        "market_60m": true,
+        "stock": true
+      },
+      "cycle_id": "manual:2026-09-04T15:00:00+08:00",
+      "cycle_raw_snapshot_id": "cycle_raw_snapshot_v1:c424e7436da69dc0283cc20e78e602bc298c9b073af46969977d05b986eadc3f",
+      "cycle_times_timezone_aware": true,
+      "determinism": {
+        "market_15m_internal_latest.json": true,
+        "market_60m_replay_latest.json": true,
+        "stock_intraday_risk_latest.json": true
+      },
+      "five_stage_reference_contract": {
+        "market_15m_internal_latest.json": "PASS",
+        "market_60m_replay_latest.json": "PASS",
+        "market_index_coverage_latest.json": "PASS",
+        "risk_input_latest.json": "PASS",
+        "stock_intraday_risk_latest.json": "PASS"
+      },
+      "instrument_snapshot_count": 10,
+      "legacy_2026_09_03_1500": "LEGACY_SNAPSHOT_IDENTITY_MISMATCH",
+      "legacy_evidence_preserved": true,
+      "legacy_saved_input_replay": "PASS",
+      "legacy_snapshot_contract": "FAIL",
+      "lookahead": {
+        "market_15m_internal_latest.json": true,
+        "market_60m_replay_latest.json": true,
+        "stock_intraday_risk_latest.json": true
+      },
+      "provider_observed_at": "2026-09-05T22:42:44.239494+08:00",
+      "raw_member_count": 30,
+      "saved_period_identity_audit": {
+        "2026-09-03T10:30:00+08:00": "PASS",
+        "2026-09-03T11:30:00+08:00": "PASS",
+        "2026-09-03T14:00:00+08:00": "PASS",
+        "2026-09-03T15:00:00+08:00": "FAIL",
+        "2026-09-04T10:30:00+08:00": "PASS",
+        "2026-09-04T11:30:00+08:00": "PASS",
+        "2026-09-04T14:00:00+08:00": "PASS",
+        "2026-09-04T15:00:00+08:00": "PASS"
+      },
+      "schema_version": 1,
+      "snapshot_hash": "c424e7436da69dc0283cc20e78e602bc298c9b073af46969977d05b986eadc3f",
+      "status": "PASS"
+    },
+    "timezone": {
+      "adapter_contract": "Convert the SDK process-local naive wall time to Unix epoch first, then derive timezone-aware Asia/Shanghai market time.",
+      "evidence_type": "CONTROLLED_PROCESS_TIMEZONE_EPOCH_INVARIANT",
+      "host_timezone_dependency": "NONE_AFTER_EPOCH_CONVERSION",
+      "longbridge_naive_datetime_semantic": "CONFIRMED",
+      "pair_checks": [
+        {
+          "data_type": "15m",
+          "epoch_seconds": 1788503400,
+          "market_time": "2026-09-04T14:30:00+08:00",
+          "process_timezones": [
+            "Asia/Tokyo",
+            "UTC"
+          ],
+          "status": "PASS"
+        },
+        {
+          "data_type": "15m",
+          "epoch_seconds": 1788504300,
+          "market_time": "2026-09-04T14:45:00+08:00",
+          "process_timezones": [
+            "Asia/Tokyo",
+            "UTC"
+          ],
+          "status": "PASS"
+        },
+        {
+          "data_type": "15m",
+          "epoch_seconds": 1788505200,
+          "market_time": "2026-09-04T15:00:00+08:00",
+          "process_timezones": [
+            "Asia/Tokyo",
+            "UTC"
+          ],
+          "status": "PASS"
+        },
+        {
+          "data_type": "60m",
+          "epoch_seconds": 1788498000,
+          "market_time": "2026-09-04T13:00:00+08:00",
+          "process_timezones": [
+            "Asia/Tokyo",
+            "UTC"
+          ],
+          "status": "PASS"
+        },
+        {
+          "data_type": "60m",
+          "epoch_seconds": 1788501600,
+          "market_time": "2026-09-04T14:00:00+08:00",
+          "process_timezones": [
+            "Asia/Tokyo",
+            "UTC"
+          ],
+          "status": "PASS"
+        },
+        {
+          "data_type": "60m",
+          "epoch_seconds": 1788505200,
+          "market_time": "2026-09-04T15:00:00+08:00",
+          "process_timezones": [
+            "Asia/Tokyo",
+            "UTC"
+          ],
+          "status": "PASS"
+        },
+        {
+          "data_type": "Daily",
+          "epoch_seconds": 1788451200,
+          "market_time": "2026-09-04T00:00:00+08:00",
+          "process_timezones": [
+            "Asia/Tokyo",
+            "UTC"
+          ],
+          "status": "PASS"
+        },
+        {
+          "data_type": "Quote",
+          "epoch_seconds": 1788505200,
+          "market_time": "2026-09-04T15:00:00+08:00",
+          "process_timezones": [
+            "Asia/Tokyo",
+            "UTC"
+          ],
+          "status": "PASS"
+        }
+      ],
+      "schema_version": 1,
+      "sdk": "longbridge==4.5.0",
+      "semantic": "SDK_PROCESS_LOCAL_NAIVE_DATETIME_BACKED_BY_ABSOLUTE_UNIX_EPOCH",
+      "status": "PASS"
+    },
+    "volume": {
+      "evidence_type": "EMPIRICALLY_CONFIRMED_BY_DIMENSIONAL_INVARIANT",
+      "longbridge_cn_volume_scale": "100_SHARES_PER_RAW_UNIT",
+      "normalized_unit": "shares",
+      "status": "CONFIRMED_EMPIRICALLY"
+    }
+  },
+  "timezone_contract": "PASS",
   "version": "DATA_SOURCE_CONTRACT_v0.1",
-  "volume_unit_contract": "DATA_CONFLICT"
+  "volume_unit_contract": "CONFIRMED_EMPIRICALLY"
 }

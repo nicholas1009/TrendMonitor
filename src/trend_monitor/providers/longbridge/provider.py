@@ -24,12 +24,29 @@ SHANGHAI = ZoneInfo("Asia/Shanghai")
 RawResponse = dict[str, Any]
 
 
-def _epoch_seconds(value: datetime) -> int:
-    # longbridge==4.5.0 returns SDK datetimes without tzinfo in the host's
-    # local timezone. datetime.timestamp() intentionally applies that local
-    # timezone for naive values. Relabelling them as UTC shifts A-share bars
-    # and makes otherwise-valid minute data fail the session validator.
-    return int(value.timestamp())
+def _epoch_seconds(value: datetime, *, host_timezone: object | None = None) -> int:
+    """Convert the SDK timestamp without reinterpreting its naive wall time.
+
+    Controlled calls under JST and UTC prove that longbridge==4.5.0 emits the
+    same instant as a naive *process-local* datetime.  Python's conversion of
+    a naive datetime therefore has to use the process-local zone.  The
+    injectable zone exists only for deterministic contract tests; production
+    uses ``astimezone()`` so date-specific host timezone rules are respected.
+    """
+
+    if value.tzinfo is not None:
+        aware = value
+    elif host_timezone is not None:
+        aware = value.replace(tzinfo=host_timezone)  # confirmed SDK-local wall time
+    else:
+        aware = value.astimezone()  # attach the process-local zone explicitly
+    return int(aware.astimezone(timezone.utc).timestamp())
+
+
+def _market_time(value: datetime) -> str:
+    return datetime.fromtimestamp(_epoch_seconds(value), tz=timezone.utc).astimezone(
+        SHANGHAI
+    ).isoformat()
 
 
 def _enum_text(value: object) -> str:
@@ -114,6 +131,7 @@ class LongbridgeProvider:
 
     @staticmethod
     def _quote_item(item: object) -> dict[str, Any]:
+        timestamp = getattr(item, "timestamp")
         return {
             "symbol": str(getattr(item, "symbol")),
             "last_done": _decimal_text(getattr(item, "last_done")),
@@ -121,7 +139,9 @@ class LongbridgeProvider:
             "open": _decimal_text(getattr(item, "open")),
             "high": _decimal_text(getattr(item, "high")),
             "low": _decimal_text(getattr(item, "low")),
-            "timestamp": _epoch_seconds(getattr(item, "timestamp")),
+            "timestamp": _epoch_seconds(timestamp),
+            "market_time": _market_time(timestamp),
+            "timestamp_semantic": "SDK_PROCESS_LOCAL_NAIVE_TO_UNIX_EPOCH",
             "volume": int(getattr(item, "volume")),
             "turnover": _decimal_text(getattr(item, "turnover")),
             "trade_status": _enum_text(getattr(item, "trade_status")),
@@ -129,6 +149,7 @@ class LongbridgeProvider:
 
     @staticmethod
     def _candlestick_item(item: object) -> dict[str, Any]:
+        timestamp = getattr(item, "timestamp")
         return {
             "close": _decimal_text(getattr(item, "close")),
             "open": _decimal_text(getattr(item, "open")),
@@ -136,7 +157,9 @@ class LongbridgeProvider:
             "high": _decimal_text(getattr(item, "high")),
             "volume": int(getattr(item, "volume")),
             "turnover": _decimal_text(getattr(item, "turnover")),
-            "timestamp": _epoch_seconds(getattr(item, "timestamp")),
+            "timestamp": _epoch_seconds(timestamp),
+            "market_time": _market_time(timestamp),
+            "timestamp_semantic": "SDK_PROCESS_LOCAL_NAIVE_TO_UNIX_EPOCH",
             "trade_session": _enum_text(getattr(item, "trade_session")),
         }
 

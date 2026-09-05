@@ -62,6 +62,7 @@ def parse_args() -> argparse.Namespace:
         "--as-of",
         help="Timezone-aware ISO timestamp used to cap the live Risk Input snapshot.",
     )
+    parser.add_argument("--cycle-id", help="Unique Runtime analysis-cycle identity.")
     return parser.parse_args()
 
 
@@ -159,15 +160,20 @@ def risk_input_block_reasons(
 
 def main() -> int:
     args = parse_args()
-    provider_observed_at = (
+    analysis_reference = (
         datetime.fromisoformat(args.as_of).astimezone(SHANGHAI)
         if args.as_of
         else datetime.now(SHANGHAI)
     )
-    as_of = latest_completed_60m_period_end(provider_observed_at)
+    provider_observed_at = datetime.now(SHANGHAI)
+    as_of = latest_completed_60m_period_end(analysis_reference)
     expected_15m, expected_60m = expected_completed_bars(as_of)
     today = as_of.date()
-    history_start = today - timedelta(days=40)
+    history_start_15m = today - timedelta(days=40)
+    # The 60m Current/Replay stage consumes an 80-trading-day chronological
+    # window. Fetch that history in the cycle's single Provider phase so no
+    # downstream replay performs a second mid-cycle refresh.
+    history_start_60m = today - timedelta(days=130)
     history_end = today
     daily_start = int((as_of - timedelta(days=160)).timestamp() * 1000)
     daily_end = int(as_of.timestamp() * 1000)
@@ -191,7 +197,12 @@ def main() -> int:
         "analysis_as_of": as_of.isoformat(),
         "provider_observed_at": provider_observed_at.isoformat(),
         "timezone": "Asia/Shanghai",
-        "history_window": {"start": history_start.isoformat(), "end": history_end.isoformat()},
+        "cycle_id": args.cycle_id or f"manual:{as_of.isoformat()}",
+        "history_window": {
+            "15m_start": history_start_15m.isoformat(),
+            "60m_start": history_start_60m.isoformat(),
+            "end": history_end.isoformat(),
+        },
         "new_indexes": {},
     }
     bundles = {}
@@ -261,6 +272,9 @@ def main() -> int:
 
             refreshed_results = {}
             for period, expected_system_count in (("15m", 16), ("60m", 4)):
+                history_start = (
+                    history_start_15m if period == "15m" else history_start_60m
+                )
                 raw = provider.get_history_candlesticks(
                     expected_symbol,
                     period=period,
@@ -402,6 +416,9 @@ def main() -> int:
             # itself when the replay advances to a new trading day.
             refreshed_results = {}
             for period in ("15m", "60m"):
+                history_start = (
+                    history_start_15m if period == "15m" else history_start_60m
+                )
                 raw = provider.get_history_candlesticks(
                     mapping.provider_symbol,
                     period=period,

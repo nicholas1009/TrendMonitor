@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from typing import Any
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from trend_monitor.errors import ErrorCategory, TrendMonitorError
 from trend_monitor.schemas import AssetType, MarketRecord, SourceTrace
@@ -44,6 +46,27 @@ def _epoch_ms(value: object) -> int | None:
     return epoch * 1000 if epoch < 10_000_000_000 else epoch
 
 
+def _timestamp_ms(item: dict[str, Any]) -> int | None:
+    epoch_ms = _epoch_ms(item.get("timestamp"))
+    market_time = item.get("market_time")
+    if epoch_ms is not None and market_time not in (None, ""):
+        parsed = datetime.fromisoformat(str(market_time))
+        if parsed.tzinfo is None:
+            raise TrendMonitorError(
+                ErrorCategory.INVALID_DATA,
+                "Longbridge market_time must be timezone-aware",
+            )
+        expected = datetime.fromtimestamp(epoch_ms / 1000, tz=timezone.utc).astimezone(
+            ZoneInfo("Asia/Shanghai")
+        )
+        if parsed != expected:
+            raise TrendMonitorError(
+                ErrorCategory.DATA_CONFLICT,
+                "Longbridge epoch and Asia/Shanghai market_time disagree",
+            )
+    return epoch_ms
+
+
 def normalize_longbridge_quote(
     raw: dict[str, Any],
     *,
@@ -59,7 +82,7 @@ def normalize_longbridge_quote(
                 symbol=str(item.get("symbol") or ""),
                 name=name,
                 asset_type=asset_type,
-                timestamp=_epoch_ms(item.get("timestamp")),
+                timestamp=_timestamp_ms(item),
                 open=_number(item.get("open")),
                 high=_number(item.get("high")),
                 low=_number(item.get("low")),
@@ -93,7 +116,7 @@ def normalize_longbridge_candlesticks(
                 symbol=symbol,
                 name=name,
                 asset_type=asset_type,
-                timestamp=_epoch_ms(item.get("timestamp")),
+                timestamp=_timestamp_ms(item),
                 open=_number(item.get("open")),
                 high=_number(item.get("high")),
                 low=_number(item.get("low")),

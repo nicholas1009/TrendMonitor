@@ -205,6 +205,19 @@ def main() -> int:
         payload = snapshot_store.load(snapshot_path)
         current_inputs[instrument_id] = risk_input_from_dict(payload["risk_60m"])
         current_source_ids[instrument_id] = snapshot_path
+    cycle_reference = coverage.get("cycle_snapshot", {})
+    cycle_path = cycle_reference.get("snapshot_path")
+    if not cycle_path:
+        print("CURRENT MARKET BUNDLE")
+        print("FAIL — frozen cycle Raw snapshot is unavailable")
+        return 1
+    cycle = snapshot_store.load_cycle(cycle_path)
+    snapshot_store.require_cycle_members(cycle, current_source_ids)
+    cycle_contract_ok = (
+        cycle_reference.get("cycle_raw_snapshot_id")
+        == cycle.get("cycle_raw_snapshot_id")
+        and cycle.get("analysis_as_of") == coverage.get("analysis_as_of")
+    )
     current_bundle_ok = (
         set(current_inputs) == set(rules.instrument_ids)
         and all(item.preflight_status is PreflightStatus.PASS_WITH_DEGRADATION for item in current_inputs.values())
@@ -227,31 +240,29 @@ def main() -> int:
         raw_cache,
     )
     builder = HistoricalRiskInputBuilder(market_data, RiskInputAssembler(contract), rules)
-    end = datetime.now(SHANGHAI).date()
+    current_source_results = _current_source_results(
+        raw_cache, market_data, current_inputs
+    )
+    current_period_end = datetime.fromisoformat(
+        next(iter(current_inputs.values())).last_completed_bar_end or ""
+    ).astimezone(SHANGHAI)
+    end = current_period_end.date()
     # 130 calendar days currently yields 90 complete A-share trading days,
     # safely above the 60-day baseline + 20-day replay requirement while
     # keeping each official history request well below the 1000-bar limit.
     start = end - timedelta(days=130)
-    cached_results = _cached_history_results(
-        raw_cache,
-        registry,
-        longbridge_adapter,
-        rules,
-        start=start,
-        end=end,
-    )
+    # The cycle's exact frozen 60m Raw members feed both Current and Replay.
+    # No downstream Provider/cache reselection is allowed inside the cycle.
+    cached_results = current_source_results
     print(f"HISTORICAL RAW CACHE REUSED {len(cached_results)}/8")
+    if len(cached_results) != 8:
+        print("HISTORICAL REPLAY\nFAIL — frozen cycle history cache is incomplete")
+        return 1
     historical_periods = builder.build(
         start=start,
         end=end,
         required_days=80,
         source_results=cached_results,
-    )
-    current_period_end = datetime.fromisoformat(
-        next(iter(current_inputs.values())).last_completed_bar_end or ""
-    ).astimezone(SHANGHAI)
-    current_source_results = _current_source_results(
-        raw_cache, market_data, current_inputs
     )
     intraday_periods = builder.build_intraday_prefix(
         as_of=current_period_end,
@@ -295,6 +306,9 @@ def main() -> int:
     replay_payload["current_human_path"] = human_path
     replay_payload["current_pipeline_match"] = pipeline_match
     replay_payload["current_pipeline_first_diff"] = first_diff
+    replay_payload["determinism"] = determinism
+    replay_payload["cycle_snapshot"] = cycle_reference
+    replay_payload["cycle_snapshot_contract"] = "PASS" if cycle_contract_ok else "FAIL"
     append_only_replay_path = output_store.save_replay(
         replay_payload,
         last_completed_bar_end=current.last_completed_bar_end,
@@ -353,6 +367,7 @@ def main() -> int:
             determinism,
             replay.lookahead_safe,
             pipeline_match,
+            cycle_contract_ok,
         )
     )
     return 0 if success else 1

@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from trend_monitor.cache import CacheStatus, RawCache  # noqa: E402
+from trend_monitor.cache import RawCache  # noqa: E402
 from trend_monitor.market_internal import (  # noqa: E402
     Historical15mRiskInputBuilder,
     Market15mInternalEngine,
@@ -37,34 +37,27 @@ from trend_monitor.services import MarketDataService  # noqa: E402
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 
 
-def _history_cache_entries(
+def _frozen_source_results(
     cache: RawCache,
-    instrument_ids: tuple[str, ...],
-    *,
-    first_period_end: datetime,
-    last_period_end: datetime,
+    market_data: MarketDataService,
+    snapshot_store: RiskInputSnapshotStore,
+    snapshot_paths: dict[str, str],
 ):
-    first_required = int((first_period_end - timedelta(days=7)).timestamp() * 1000)
-    last_required = int(last_period_end.timestamp() * 1000)
-    selected = {}
-    for order, entry in enumerate(cache.entries()):
-        if (
-            entry.instrument_id not in instrument_ids
-            or entry.provider != "longbridge"
-            or entry.data_type is not DataType.KLINE_15M
-            or entry.status is CacheStatus.INVALID
-            or entry.data_start is None
-            or entry.data_end is None
-            or entry.data_start > first_required
-            or entry.data_end < last_required
-            or not Path(entry.path).is_file()
-        ):
-            continue
-        current = selected.get(entry.instrument_id)
-        rank = (entry.fetched_at, order)
-        if current is None or rank > current[0]:
-            selected[entry.instrument_id] = (rank, entry)
-    return {key: value[1] for key, value in selected.items()}
+    """Load the exact 15m Raw members frozen by this analysis cycle."""
+    entries_by_path = {
+        str(Path(entry.path).resolve()): entry
+        for entry in cache.entries()
+        if entry.data_type is DataType.KLINE_15M
+    }
+    results = {}
+    for instrument_id, snapshot_path in snapshot_paths.items():
+        payload = snapshot_store.load(snapshot_path)
+        raw_path = payload["support_15m"]["source_trace"].get("raw_path")
+        entry = entries_by_path.get(str(Path(raw_path).resolve())) if raw_path else None
+        if entry is None:
+            raise ValueError(f"frozen 15m Raw member is not in cache: {instrument_id}")
+        results[instrument_id] = market_data.load_cached(entry)
+    return results
 
 
 def _source_ids(snapshot_path: str, instrument_ids: tuple[str, ...]) -> dict[str, str]:
@@ -97,6 +90,18 @@ def main() -> int:
         risk_input = risk_input_from_dict(payload["support_15m"])
         current_inputs[entry["instrument_id"]] = risk_input
         current_source_ids[entry["instrument_id"]] = entry["snapshot_path"]
+    cycle_reference = coverage.get("cycle_snapshot", {})
+    cycle_path = cycle_reference.get("snapshot_path")
+    if not cycle_path:
+        print("CURRENT INTERNAL STRUCTURE\nFAIL — frozen cycle Raw snapshot is unavailable")
+        return 1
+    cycle = snapshot_store.load_cycle(cycle_path)
+    snapshot_store.require_cycle_members(cycle, current_source_ids)
+    cycle_contract_ok = (
+        cycle_reference.get("cycle_raw_snapshot_id")
+        == cycle.get("cycle_raw_snapshot_id")
+        == task8_replay.get("cycle_snapshot", {}).get("cycle_raw_snapshot_id")
+    )
     current_bundle_ok = (
         set(current_inputs) == set(source_rules.instrument_ids)
         and all(item.analysis_period.value == "15M" for item in current_inputs.values())
@@ -133,13 +138,12 @@ def main() -> int:
     market_data = MarketDataService(registry, (adapter,), cache)
     first_end = datetime.fromisoformat(task8_replay["results"][0]["last_completed_bar_end"])
     last_end = datetime.fromisoformat(task8_replay["results"][-1]["last_completed_bar_end"])
-    entries = _history_cache_entries(
+    source_results = _frozen_source_results(
         cache,
-        source_rules.instrument_ids,
-        first_period_end=first_end,
-        last_period_end=last_end,
+        market_data,
+        snapshot_store,
+        current_source_ids,
     )
-    source_results = {item: market_data.load_cached(entry) for item, entry in entries.items()}
     print(f"HISTORICAL 15M RAW CACHE REUSED {len(source_results)}/8")
     if len(source_results) != 8:
         print("HISTORICAL REPLAY\nFAIL — cached history coverage is incomplete")
@@ -217,6 +221,9 @@ def main() -> int:
     replay_payload["current_machine_path"] = machine_path
     replay_payload["current_human_path"] = human_path
     replay_payload["in_progress_machine_paths"] = early_paths
+    replay_payload["determinism"] = current_deterministic and replay.deterministic
+    replay_payload["cycle_snapshot"] = cycle_reference
+    replay_payload["cycle_snapshot_contract"] = "PASS" if cycle_contract_ok else "FAIL"
     replay_path = output_store.save_replay(
         replay_payload,
         last_period_end=current.period_60m_end,
@@ -271,6 +278,7 @@ def main() -> int:
             replay.lookahead_safe,
             current.data_quality["lookahead_safe"],
             [item.completed_15m_count for item in early_views] == [2, 3],
+            cycle_contract_ok,
         )
     )
     return 0 if success else 1

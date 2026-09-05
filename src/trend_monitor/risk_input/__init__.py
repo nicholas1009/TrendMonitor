@@ -4,7 +4,7 @@ from .assembler import RiskInputAssembler
 from .market_bundle import MARKET_INDEXES, build_market_risk_group, market_coverage_status
 from .preflight import PreflightGate, PreflightResult
 from .service import RiskInputService
-from .serialization import risk_input_from_dict
+from .serialization import instrument_bundle_from_dict, risk_input_from_dict
 from .snapshot import RiskInputSnapshotStore
 
 __all__ = [
@@ -17,4 +17,5 @@ __all__ = [
     "build_market_risk_group",
     "market_coverage_status",
     "risk_input_from_dict",
+    "instrument_bundle_from_dict",
 ]

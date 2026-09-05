@@ -20,7 +20,11 @@ from trend_monitor.providers.hithink.adapter import HithinkMarketDataAdapter  # 
 from trend_monitor.providers.longbridge import LongbridgeMarketDataAdapter, LongbridgeProvider  # noqa: E402
 from trend_monitor.quality import RiskFeatureContract  # noqa: E402
 from trend_monitor.registry import InstrumentRegistry, MappingType  # noqa: E402
-from trend_monitor.risk_input import RiskInputService, RiskInputSnapshotStore  # noqa: E402
+from trend_monitor.risk_input import (  # noqa: E402
+    RiskInputService,
+    RiskInputSnapshotStore,
+    instrument_bundle_from_dict,
+)
 from trend_monitor.schemas import DataType, GroupEntry, PreflightStatus, RiskInputGroup  # noqa: E402
 from trend_monitor.services import MarketDataService  # noqa: E402
 from trend_monitor.transformation import latest_completed_60m_period_end  # noqa: E402
@@ -84,17 +88,24 @@ def provenance_check(bundle) -> bool:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--as-of", help="Timezone-aware ISO timestamp for the Risk Input snapshot.")
+    parser.add_argument("--cycle-id", help="Unique Runtime analysis-cycle identity.")
+    parser.add_argument(
+        "--reuse-existing",
+        action="store_true",
+        help="Offline verification only: freeze the existing same-as-of snapshots without Provider reads.",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    provider_observed_at = (
+    analysis_reference = (
         datetime.fromisoformat(args.as_of).astimezone(SHANGHAI)
         if args.as_of
         else datetime.now(SHANGHAI)
     )
-    as_of = latest_completed_60m_period_end(provider_observed_at)
+    provider_observed_at = datetime.now(SHANGHAI)
+    as_of = latest_completed_60m_period_end(analysis_reference)
     registry = InstrumentRegistry.load(PROJECT_ROOT / "config" / "instruments.json")
     contract = RiskFeatureContract.load(PROJECT_ROOT / "config" / "risk_feature_contract.json")
     cache = RawCache(PROJECT_ROOT / "data" / "raw")
@@ -109,6 +120,43 @@ def main() -> int:
     )
     service = RiskInputService(market_data, contract)
     store = RiskInputSnapshotStore(PROJECT_ROOT / "data" / "risk_inputs")
+    coverage_report_path = (
+        PROJECT_ROOT / "data" / "reports" / "market_index_coverage_latest.json"
+    )
+    coverage_report = json.loads(coverage_report_path.read_text(encoding="utf-8"))
+    if coverage_report.get("analysis_as_of") != as_of.isoformat():
+        print("RISK INPUT BLOCKED — coverage analysis_as_of does not match this cycle")
+        return 1
+    cycle_id = args.cycle_id or str(
+        coverage_report.get("cycle_id") or f"manual:{as_of.isoformat()}"
+    )
+    if args.cycle_id and coverage_report.get("cycle_id") != args.cycle_id:
+        print("RISK INPUT BLOCKED — coverage cycle_id does not match this cycle")
+        return 1
+    coverage_snapshot_paths = {
+        str(item["instrument_id"]): str(item["snapshot_path"])
+        for item in coverage_report.get("market_bundle", {}).get("entries", [])
+        if item.get("snapshot_path")
+    }
+    existing_snapshot_paths = {}
+    existing_report_path = PROJECT_ROOT / "data" / "reports" / "risk_input_latest.json"
+    if args.reuse_existing:
+        existing_report = json.loads(existing_report_path.read_text(encoding="utf-8"))
+        if existing_report.get("analysis_as_of") != as_of.isoformat():
+            print("RISK INPUT BLOCKED — existing Risk Input analysis_as_of does not match this cycle")
+            return 1
+        existing_snapshot_paths = {
+            str(instrument_id): str(item["snapshot_path"])
+            for instrument_id, item in existing_report.get("instruments", {}).items()
+            if item.get("snapshot_path")
+        }
+        missing_existing = set(REAL_INSTRUMENTS[:2]) - set(existing_snapshot_paths)
+        if missing_existing:
+            print(
+                "RISK INPUT BLOCKED — existing same-as-of stock snapshots are missing: "
+                + ",".join(sorted(missing_existing))
+            )
+            return 1
     report = {
         "generated_at": provider_observed_at.isoformat(),
         "analysis_as_of": as_of.isoformat(),
@@ -129,44 +177,55 @@ def main() -> int:
     history_start = as_of.date() - timedelta(days=130)
     history_end = as_of.date()
     refreshed_stock_results = {}
-    for instrument_id in REAL_INSTRUMENTS[:2]:
-        mapping = registry.resolve(instrument_id, "longbridge")
-        refreshed_stock_results[instrument_id] = {}
-        for period in ("15m", "60m"):
-            raw = longbridge_provider.get_history_candlesticks(
-                mapping.provider_symbol,
-                period=period,
-                start=history_start,
-                end=history_end,
-            )
-            entry = cache.save(
-                instrument_id=instrument_id,
-                provider="longbridge",
-                provider_symbol=mapping.provider_symbol,
-                data_type=DataType(period),
-                raw=raw,
-                request_start=int(
-                    datetime.combine(history_start, datetime.min.time(), tzinfo=SHANGHAI).timestamp()
-                    * 1000
-                ),
-                request_end=int(
-                    datetime.combine(history_end, datetime.max.time(), tzinfo=SHANGHAI).timestamp()
-                    * 1000
-                ),
-            )
-            refreshed_stock_results[instrument_id][period] = market_data.load_cached(entry)
+    if not args.reuse_existing:
+        for instrument_id in REAL_INSTRUMENTS[:2]:
+            mapping = registry.resolve(instrument_id, "longbridge")
+            refreshed_stock_results[instrument_id] = {}
+            for period in ("15m", "60m"):
+                raw = longbridge_provider.get_history_candlesticks(
+                    mapping.provider_symbol,
+                    period=period,
+                    start=history_start,
+                    end=history_end,
+                )
+                entry = cache.save(
+                    instrument_id=instrument_id,
+                    provider="longbridge",
+                    provider_symbol=mapping.provider_symbol,
+                    data_type=DataType(period),
+                    raw=raw,
+                    request_start=int(
+                        datetime.combine(history_start, datetime.min.time(), tzinfo=SHANGHAI).timestamp()
+                        * 1000
+                    ),
+                    request_end=int(
+                        datetime.combine(history_end, datetime.max.time(), tzinfo=SHANGHAI).timestamp()
+                        * 1000
+                    ),
+                )
+                refreshed_stock_results[instrument_id][period] = market_data.load_cached(entry)
 
     for instrument_id in REAL_INSTRUMENTS:
         print(f"[ASSEMBLE] {instrument_id}")
-        bundle = service.build_bundle(
-            instrument_id,
-            as_of=as_of,
-            requested_provider="longbridge",
-            fallback_providers=("hithink",),
-            minute_results=refreshed_stock_results.get(instrument_id),
-        )
+        if instrument_id in coverage_snapshot_paths:
+            # MARKET_DATA_REFRESH already fetched, normalized, validated and
+            # snapshotted these indexes for this cycle. Reuse that exact
+            # immutable snapshot instead of performing a second Provider read.
+            snapshot_path = coverage_snapshot_paths[instrument_id]
+            bundle = instrument_bundle_from_dict(store.load(snapshot_path))
+        elif instrument_id in existing_snapshot_paths:
+            snapshot_path = existing_snapshot_paths[instrument_id]
+            bundle = instrument_bundle_from_dict(store.load(snapshot_path))
+        else:
+            bundle = service.build_bundle(
+                instrument_id,
+                as_of=as_of,
+                requested_provider="longbridge",
+                fallback_providers=("hithink",),
+                minute_results=refreshed_stock_results.get(instrument_id),
+            )
+            snapshot_path = store.save_bundle(bundle)
         bundles[instrument_id] = bundle
-        snapshot_path = store.save_bundle(bundle)
         snapshot_paths[instrument_id] = snapshot_path
         field_ok = feature_check(bundle)
         provenance_ok = provenance_check(bundle)
@@ -231,6 +290,38 @@ def main() -> int:
     report["market_bundle"] = {"snapshot_path": market_path, **market_group.to_dict()}
     report["stock_bundle"] = {"snapshot_path": stock_path, **stock_group.to_dict()}
 
+    cycle_instrument_paths = {
+        **coverage_snapshot_paths,
+        **{
+            instrument_id: snapshot_paths[instrument_id]
+            for instrument_id in REAL_INSTRUMENTS[:2]
+        },
+    }
+    cycle_path, cycle = store.save_cycle(
+        cycle_id=cycle_id,
+        analysis_as_of=as_of.isoformat(),
+        provider_observed_at=provider_observed_at.isoformat(),
+        instrument_snapshot_paths=cycle_instrument_paths,
+        raw_root=PROJECT_ROOT / "data" / "raw",
+    )
+    cycle_reference = {
+        "cycle_id": cycle["cycle_id"],
+        "analysis_as_of": cycle["analysis_as_of"],
+        "provider_observed_at": cycle["provider_observed_at"],
+        "cycle_raw_snapshot_id": cycle["cycle_raw_snapshot_id"],
+        "snapshot_hash": cycle["snapshot_hash"],
+        "snapshot_path": cycle_path,
+    }
+    report["cycle_snapshot"] = cycle_reference
+    coverage_report["cycle_snapshot"] = cycle_reference
+    coverage_report["market_bundle"]["cycle_raw_snapshot_id"] = cycle[
+        "cycle_raw_snapshot_id"
+    ]
+    coverage_report_path.write_text(
+        json.dumps(coverage_report, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
     report_path = PROJECT_ROOT / "data" / "reports" / "risk_input_latest.json"
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -242,6 +333,7 @@ def main() -> int:
     print(f"FEATURE DEGRADATION: {'PASS' if all(item.preflight_status is PreflightStatus.PASS_WITH_DEGRADATION for item in bundles.values()) else 'FAIL'}")
     print(f"PROVENANCE: {'PASS' if all(provenance_check(item) for item in bundles.values()) else 'FAIL'}")
     print(f"REPORT: {report_path}")
+    print(f"CYCLE RAW SNAPSHOT: {cycle['cycle_raw_snapshot_id']} — {cycle_path}")
     return 0 if failures == 0 else 1
 
 

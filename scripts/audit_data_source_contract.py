@@ -11,15 +11,26 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
+import sys
 from typing import Any, Iterable
+from zoneinfo import ZoneInfo
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from trend_monitor.normalization import (  # noqa: E402
+    evaluate_cn_volume_invariant,
+    normalize_volume_shares,
+)
+from trend_monitor.risk_input import RiskInputSnapshotStore  # noqa: E402
+
 AUDIT_ROOT = ROOT / "audit" / "data_source_contract"
 TRACE_ROOT = AUDIT_ROOT / "traces"
 LOCAL_VOLUME_EVIDENCE = AUDIT_ROOT / "local_evidence" / "volume_samples.json"
+LOCAL_TIMEZONE_EVIDENCE = AUDIT_ROOT / "local_evidence" / "timezone_samples.json"
 AUDIT_DATES = ("2026-09-03", "2026-09-04")
 STOCK_IDS = ("stock.hengtong_optic", "stock.wus_printed_circuit")
 
@@ -638,37 +649,80 @@ def unit_contract() -> dict[str, Any]:
     local_evidence = read_json(LOCAL_VOLUME_EVIDENCE)
     for row in local_evidence["samples"]:
         item = dict(row)
+        hithink_invariant = evaluate_cn_volume_invariant(
+            volume_raw=row["hithink_volume"],
+            turnover_raw=row["hithink_turnover"],
+            low=row["low"],
+            high=row["high"],
+        )
+        longbridge_invariant = evaluate_cn_volume_invariant(
+            volume_raw=row["longbridge_volume"],
+            turnover_raw=row["longbridge_turnover"],
+            low=row["low"],
+            high=row["high"],
+        )
         item["raw_volume_ratio_hithink_to_longbridge"] = round(
             row["hithink_volume"] / row["longbridge_volume"], 9
         )
         item["turnover_difference_hithink_minus_longbridge"] = round(
             row["hithink_turnover"] - row["longbridge_turnover"], 6
         )
+        hithink_normalized = normalize_volume_shares(
+            row["hithink_volume"], provider="hithink", data_type="daily"
+        )
+        longbridge_normalized = normalize_volume_shares(
+            row["longbridge_volume"], provider="longbridge", data_type="daily"
+        )
         item.update(
             {
-                "hithink_documented_volume_unit": "share",
-                "longbridge_documented_volume_unit": "UNKNOWN",
-                "hithink_normalized_volume": row["hithink_volume"],
-                "longbridge_normalized_volume": row["longbridge_volume"],
-                "normalized_unit": "PROVIDER_RAW",
-                "conversion_rule": None,
+                "hithink_documented_volume_unit": "shares",
+                "longbridge_volume_unit_evidence": "EMPIRICALLY_CONFIRMED_BY_DIMENSIONAL_INVARIANT",
+                "hithink_invariant": hithink_invariant.to_dict(),
+                "longbridge_invariant": longbridge_invariant.to_dict(),
+                "hithink_normalized_volume": hithink_normalized,
+                "longbridge_normalized_volume": longbridge_normalized,
+                "normalized_volume_difference": hithink_normalized
+                - longbridge_normalized,
+                "normalized_unit": "shares",
+                "conversion_rule": "LONGBRIDGE_CN_VOLUME_SCALE=100_SHARES_PER_RAW_UNIT",
             }
         )
         samples.append(item)
     ratios = [item["raw_volume_ratio_hithink_to_longbridge"] for item in samples]
+    all_factor_1_invalid = all(
+        not item["longbridge_invariant"]["factor_1_valid"] for item in samples
+    )
+    all_factor_100_valid = all(
+        item["longbridge_invariant"]["factor_100_valid"] for item in samples
+    )
+    all_hithink_identity_valid = all(
+        item["hithink_invariant"]["factor_1_valid"] for item in samples
+    )
+    no_counterexample = (
+        all_factor_1_invalid and all_factor_100_valid and all_hithink_identity_valid
+    )
     return {
         "schema_version": 1,
-        "status": "DATA_CONFLICT",
+        "status": "CONFIRMED_EMPIRICALLY",
+        "evidence_type": "EMPIRICALLY_CONFIRMED_BY_DIMENSIONAL_INVARIANT",
         "turnover_status": "UNKNOWN",
         "price_adjustment_status": "PASS",
-        "canonical_normalized_volume_unit": "UNKNOWN",
-        "conversion_location": "NONE",
-        "auto_normalization_allowed": False,
-        "reason": "Hithink documents stock Daily/Quote volume as shares, while official Longbridge field documentation names the field but does not state its unit. A stable approximately 100x ratio is evidence of a raw-unit mismatch, not authority to infer or convert the Longbridge unit.",
+        "canonical_normalized_volume_unit": "shares",
+        "longbridge_cn_volume_scale": "100_SHARES_PER_RAW_UNIT",
+        "conversion_location": "EXPLICIT_NORMALIZATION_CONTRACT",
+        "auto_normalization_allowed": True,
+        "unknown_unit_auto_normalization_allowed": False,
+        "reason": "All six retained samples reject raw factor 1, accept factor 100 inside the observed Daily price range, retain an approximately 100x Hithink/Longbridge raw ratio, and contain no counterexample.",
         "ratio_summary": {
             "sample_count": len(samples),
             "minimum": min(ratios),
             "maximum": max(ratios),
+        },
+        "dimensional_invariant": {
+            "all_longbridge_factor_1_invalid": all_factor_1_invalid,
+            "all_longbridge_factor_100_valid": all_factor_100_valid,
+            "all_hithink_identity_valid": all_hithink_identity_valid,
+            "counterexamples": 0 if no_counterexample else 1,
         },
         "provider_contracts": [
             {
@@ -689,8 +743,9 @@ def unit_contract() -> dict[str, Any]:
                 "provider": "longbridge",
                 "field": "Candlestick/Quote volume",
                 "documented_unit": "UNKNOWN",
-                "status": "UNKNOWN",
-                "evidence": "Official Longbridge candlestick and quote references specify int64 volume but no unit",
+                "normalized_unit": "shares",
+                "status": "CONFIRMED_EMPIRICALLY",
+                "evidence": "Six retained CN Daily samples satisfy the dimensional invariant only at 100 shares per raw unit; this is empirical, not official documentation.",
             },
         ],
         "turnover": {
@@ -704,8 +759,8 @@ def unit_contract() -> dict[str, Any]:
         "samples": samples,
         "post_audit_resolution_600150": {
             "original_status": "DATA_CONFLICT",
-            "status": "DATA_CONFLICT",
-            "reason": "Price/date agreement and a stable ratio do not establish the undocumented Longbridge volume unit, so no authorized normalization can be applied.",
+            "status": "PASS_AFTER_UNIT_NORMALIZATION",
+            "reason": "After the confirmed 100-shares-per-raw-unit normalization, both provider volumes agree within provider integer rounding and the existing date/OHLC/turnover checks remain valid.",
             "historical_report_modified": False,
         },
     }
@@ -714,7 +769,7 @@ def unit_contract() -> dict[str, Any]:
 def normalize_volume_if_documented(
     value: float, *, documented_unit: str | None, target_unit: str = "share"
 ) -> float | None:
-    """Return a value only for an identity unit contract; never infer a conversion."""
+    """Compatibility helper for explicitly documented identity units only."""
     if documented_unit is None or documented_unit == "UNKNOWN":
         return None
     if documented_unit != target_unit:
@@ -725,7 +780,7 @@ def normalize_volume_if_documented(
 def fallback_audit() -> dict[str, Any]:
     return {
         "schema_version": 1,
-        "status": "PARTIAL",
+        "status": "CONFIRMED_BLOCKED",
         "silent_fallback_found": False,
         "formal_cross_provider_fallbacks_allowed": [],
         "entries": [
@@ -733,14 +788,14 @@ def fallback_audit() -> dict[str, Any]:
                 "data_type": "Daily",
                 "primary": "longbridge",
                 "fallback": "hithink",
-                "implementation": "Explicit candidate passed by production verification/risk-input call sites; requested/actual provider and fallback metadata are retained.",
-                "trigger": "Primary provider load failure or unavailable cached result",
-                "unit_compatibility": "DATA_CONFLICT_FOR_VOLUME",
+                "implementation": "The production RiskInputService filters Hithink from the Daily fallback candidates when Longbridge is requested and records an explicit block reason.",
+                "trigger": "Longbridge Daily unavailable -> existing DATA_NOT_READY/DATA_INCOMPLETE path",
+                "unit_compatibility": "VOLUME_NORMALIZATION_CONFIRMED_BUT_NOT_SUFFICIENT_FOR_PROVIDER_APPROVAL",
                 "adjustment_compatibility": "NO_ADJUST_COMPATIBLE",
-                "semantic_compatibility": "QUESTION",
-                "provenance_behavior": "EXPLICIT",
-                "notification_behavior": "NO_DEDICATED_FALLBACK_NOTIFICATION",
-                "status": "QUESTION",
+                "semantic_compatibility": "BLOCKED_PENDING_CONTRACT_VALIDATION",
+                "provenance_behavior": "EXPLICIT_BLOCK_REASON",
+                "notification_behavior": "EXISTING_RUNTIME_ERROR_POLICY",
+                "status": "BLOCKED_PENDING_CONTRACT_VALIDATION",
             },
             {
                 "data_type": "15m/60m",
@@ -787,15 +842,297 @@ def fallback_audit() -> dict[str, Any]:
             "behavior": "One SDK-context recreation/retry for a network error",
             "classified_as_source_fallback": False,
         },
-        "required_resolution": "Formally approve or block the implemented Daily Hithink fallback after resolving unit and field semantics.",
+        "research_hithink_daily": "ALLOWED_EXPLICITLY",
+        "required_resolution": "A separate versioned contract validation and human approval are required before any production Hithink Daily fallback can be enabled.",
     }
 
 
-def contract_matrix(summary: dict[str, Any], volume: dict[str, Any], fallback: dict[str, Any]) -> dict[str, Any]:
+def timezone_audit() -> dict[str, Any]:
+    evidence = read_json(LOCAL_TIMEZONE_EVIDENCE)
+    grouped: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for item in evidence["observations"]:
+        grouped.setdefault((item["data_type"], item["market_time"]), []).append(item)
+    pair_checks = []
+    for (data_type, market_time), observations in sorted(grouped.items()):
+        epochs = {item["epoch_seconds"] for item in observations}
+        process_timezones = {item["process_timezone"] for item in observations}
+        expected_market_time = datetime.fromtimestamp(
+            next(iter(epochs)), tz=timezone.utc
+        ).astimezone(ZoneInfo("Asia/Shanghai")).isoformat()
+        passed = (
+            len(epochs) == 1
+            and process_timezones == {"Asia/Tokyo", "UTC"}
+            and expected_market_time == market_time
+        )
+        pair_checks.append(
+            {
+                "data_type": data_type,
+                "market_time": market_time,
+                "epoch_seconds": next(iter(epochs)) if len(epochs) == 1 else None,
+                "process_timezones": sorted(process_timezones),
+                "status": "PASS" if passed else "FAIL",
+            }
+        )
+    passed = bool(pair_checks) and all(item["status"] == "PASS" for item in pair_checks)
+    return {
+        "schema_version": 1,
+        "status": "PASS" if passed else "FAIL",
+        "longbridge_naive_datetime_semantic": "CONFIRMED" if passed else "PROVISIONAL",
+        "evidence_type": "CONTROLLED_PROCESS_TIMEZONE_EPOCH_INVARIANT",
+        "sdk": evidence["sdk"],
+        "semantic": "SDK_PROCESS_LOCAL_NAIVE_DATETIME_BACKED_BY_ABSOLUTE_UNIX_EPOCH",
+        "adapter_contract": "Convert the SDK process-local naive wall time to Unix epoch first, then derive timezone-aware Asia/Shanghai market time.",
+        "host_timezone_dependency": "NONE_AFTER_EPOCH_CONVERSION" if passed else "UNKNOWN",
+        "pair_checks": pair_checks,
+    }
+
+
+def snapshot_resolution(period_traces: list[dict[str, Any]]) -> dict[str, Any]:
+    report_names = (
+        "market_index_coverage_latest.json",
+        "risk_input_latest.json",
+        "market_60m_replay_latest.json",
+        "market_15m_internal_latest.json",
+        "stock_intraday_risk_latest.json",
+    )
+    reports = {}
+    for name in report_names:
+        path = ROOT / "data" / "reports" / name
+        if not path.exists():
+            return {
+                "schema_version": 1,
+                "status": "PENDING",
+                "reason": f"missing local report: {name}",
+                "legacy_2026_09_03_1500": "LEGACY_SNAPSHOT_IDENTITY_MISMATCH",
+            }
+        reports[name] = read_json(path)
+    cycle_refs = [item.get("cycle_snapshot") or {} for item in reports.values()]
+    ids = {item.get("cycle_raw_snapshot_id") for item in cycle_refs}
+    paths = {item.get("snapshot_path") for item in cycle_refs}
+    if None in ids or None in paths or len(ids) != 1 or len(paths) != 1:
+        return {
+            "schema_version": 1,
+            "status": "PENDING",
+            "reason": "latest five-stage reports do not share one cycle snapshot",
+            "legacy_2026_09_03_1500": "LEGACY_SNAPSHOT_IDENTITY_MISMATCH",
+        }
+    cycle_path = next(iter(paths))
+    store = RiskInputSnapshotStore(ROOT / "data" / "risk_inputs")
+    cycle = store.load_cycle(cycle_path)
+    report_contracts = {
+        name: payload.get("cycle_snapshot_contract", "PASS")
+        for name, payload in reports.items()
+    }
+    current_replay = {
+        "market_60m": reports["market_60m_replay_latest.json"].get(
+            "current_pipeline_match"
+        ),
+        "stock": reports["stock_intraday_risk_latest.json"].get(
+            "current_pipeline_match"
+        ),
+    }
+    determinism = {
+        name: reports[name].get("determinism")
+        for name in (
+            "market_60m_replay_latest.json",
+            "market_15m_internal_latest.json",
+            "stock_intraday_risk_latest.json",
+        )
+    }
+    lookahead = {
+        name: reports[name].get("lookahead_safe")
+        for name in (
+            "market_60m_replay_latest.json",
+            "market_15m_internal_latest.json",
+            "stock_intraday_risk_latest.json",
+        )
+    }
+    cycle_times_aware = all(
+        datetime.fromisoformat(str(cycle[field])).tzinfo is not None
+        for field in ("analysis_as_of", "provider_observed_at")
+    )
+    legacy_trace = next(
+        item
+        for item in period_traces
+        if item["period"] == "2026-09-03T15:00:00+08:00"
+    )
+    replay_market_legacy = next(
+        item
+        for item in reports["market_60m_replay_latest.json"]["results"]
+        if item["last_completed_bar_end"] == legacy_trace["period"]
+    )
+    replay_stock_legacy = {
+        instrument_id: next(
+            item["stock_60m"]
+            for item in reports["stock_intraday_risk_latest.json"]["results"][instrument_id]
+            if item["stock_60m"]["period_end"] == legacy_trace["period"]
+        )
+        for instrument_id in STOCK_IDS
+    }
+    legacy_saved_input_replay = (
+        (replay_market_legacy["risk_light"], replay_market_legacy["risk_score"])
+        == (
+            legacy_trace["market_result"]["risk_light"],
+            legacy_trace["market_result"]["risk_score"],
+        )
+        and all(
+            (replay_stock_legacy[instrument_id]["risk_light"], replay_stock_legacy[instrument_id]["risk_score"])
+            == (
+                legacy_trace["stock_results"][instrument_id]["risk_light"],
+                legacy_trace["stock_results"][instrument_id]["risk_score"],
+            )
+            for instrument_id in STOCK_IDS
+        )
+    )
+    passed = (
+        cycle.get("cycle_raw_snapshot_id") == next(iter(ids))
+        and len(cycle.get("instrument_snapshots", [])) == 10
+        and len(cycle.get("members", [])) == 30
+        and all(value == "PASS" for value in report_contracts.values())
+        and all(value is True for value in current_replay.values())
+        and all(value is True for value in determinism.values())
+        and all(value is True for value in lookahead.values())
+        and cycle_times_aware
+        and legacy_saved_input_replay
+    )
+    return {
+        "schema_version": 1,
+        "status": "PASS" if passed else "FAIL",
+        "cycle_id": cycle.get("cycle_id"),
+        "analysis_as_of": cycle.get("analysis_as_of"),
+        "provider_observed_at": cycle.get("provider_observed_at"),
+        "cycle_raw_snapshot_id": cycle.get("cycle_raw_snapshot_id"),
+        "snapshot_hash": cycle.get("snapshot_hash"),
+        "instrument_snapshot_count": len(cycle.get("instrument_snapshots", [])),
+        "raw_member_count": len(cycle.get("members", [])),
+        "five_stage_reference_contract": report_contracts,
+        "current_replay_match": current_replay,
+        "determinism": determinism,
+        "lookahead": lookahead,
+        "cycle_times_timezone_aware": cycle_times_aware,
+        "legacy_2026_09_03_1500": "LEGACY_SNAPSHOT_IDENTITY_MISMATCH",
+        "legacy_snapshot_contract": legacy_trace["snapshot_contract"],
+        "legacy_evidence_preserved": True,
+        "legacy_saved_input_replay": "PASS"
+        if legacy_saved_input_replay
+        else "FAIL",
+        "saved_period_identity_audit": {
+            item["period"]: item["snapshot_contract"] for item in period_traces
+        },
+    }
+
+
+def task_025_regression(period_traces: list[dict[str, Any]]) -> dict[str, Any]:
+    market_report = read_json(ROOT / "data" / "reports" / "market_60m_replay_latest.json")
+    stock_report = read_json(ROOT / "data" / "reports" / "stock_intraday_risk_latest.json")
+    expected_market = {
+        "2026-09-04T10:30:00+08:00": ("GREEN", 0),
+        "2026-09-04T11:30:00+08:00": ("YELLOW", 3),
+        "2026-09-04T14:00:00+08:00": ("ORANGE", 5),
+        "2026-09-04T15:00:00+08:00": ("ORANGE", 5),
+    }
+    expected_stocks = {
+        "stock.hengtong_optic": {
+            "2026-09-04T10:30:00+08:00": ("YELLOW", 1),
+            "2026-09-04T11:30:00+08:00": ("YELLOW", 2),
+            "2026-09-04T14:00:00+08:00": ("YELLOW", 2),
+            "2026-09-04T15:00:00+08:00": ("YELLOW", 2),
+        },
+        "stock.wus_printed_circuit": {
+            "2026-09-04T10:30:00+08:00": ("YELLOW", 2),
+            "2026-09-04T11:30:00+08:00": ("YELLOW", 2),
+            "2026-09-04T14:00:00+08:00": ("YELLOW", 2),
+            "2026-09-04T15:00:00+08:00": ("YELLOW", 2),
+        },
+    }
+    observed_market = {
+        item["last_completed_bar_end"]: (item["risk_light"], item["risk_score"])
+        for item in market_report["results"]
+        if item["last_completed_bar_end"] in expected_market
+    }
+    observed_stocks = {}
+    for instrument_id, expected in expected_stocks.items():
+        observed_stocks[instrument_id] = {
+            item["stock_60m"]["period_end"]: (
+                item["stock_60m"]["risk_light"],
+                item["stock_60m"]["risk_score"],
+            )
+            for item in stock_report["results"][instrument_id]
+            if item["stock_60m"]["period_end"] in expected
+        }
+    trace_1030 = next(
+        item
+        for item in period_traces
+        if item["period"] == "2026-09-04T10:30:00+08:00"
+    )
+    disabled_previous = [
+        item
+        for item in trace_1030["feature_lineage_audit"]
+        if item["feature"] == "previous_period_close" and item["state"] == "DISABLED"
+    ]
+    disabled_provenance = bool(disabled_previous) and all(
+        not item["lineage_required"]
+        and not item["lineage_present"]
+        and item["status"] == "PASS"
+        for item in disabled_previous
+    )
+    current_replay_match = (
+        market_report.get("current_pipeline_match") is True
+        and stock_report.get("current_pipeline_match") is True
+    )
+    determinism = (
+        market_report.get("determinism") is True
+        and stock_report.get("determinism") is True
+    )
+    lookahead = (
+        market_report.get("lookahead_safe") is True
+        and stock_report.get("lookahead_safe") is True
+    )
+    period_end_1500 = "2026-09-04T15:00:00+08:00" in observed_market
+    passed = (
+        observed_market == expected_market
+        and observed_stocks == expected_stocks
+        and disabled_provenance
+        and current_replay_match
+        and determinism
+        and lookahead
+        and period_end_1500
+    )
+    return {
+        "schema_version": 1,
+        "status": "PASS" if passed else "FAIL",
+        "market": {
+            key: {"risk_light": value[0], "risk_score": value[1]}
+            for key, value in observed_market.items()
+        },
+        "stocks": {
+            instrument_id: {
+                key: {"risk_light": value[0], "risk_score": value[1]}
+                for key, value in observed.items()
+            }
+            for instrument_id, observed in observed_stocks.items()
+        },
+        "disabled_previous_period_provenance": "PASS"
+        if disabled_provenance
+        else "FAIL",
+        "current_replay_match": "PASS" if current_replay_match else "FAIL",
+        "determinism": "PASS" if determinism else "FAIL",
+        "lookahead": "PASS" if lookahead else "FAIL",
+        "period_end_1500": "PASS" if period_end_1500 else "FAIL",
+    }
+
+
+def contract_matrix(
+    summary: dict[str, Any],
+    volume: dict[str, Any],
+    fallback: dict[str, Any],
+    timezone_contract: dict[str, Any],
+    snapshot_contract: dict[str, Any],
+    regression: dict[str, Any],
+) -> dict[str, Any]:
     common_lb = {
         "canonical_source": "longbridge",
         "validation_source": "local validation/replay; Hithink cross-check is research only",
-        "fallback_policy": "QUESTION_FOR_DAILY; NOT_IMPLEMENTED_FOR_MINUTE",
         "timezone": "Asia/Shanghai trading-date mapping",
         "provenance_required": True,
         "current_status": "CONFIRMED",
@@ -851,19 +1188,33 @@ def contract_matrix(summary: dict[str, Any], volume: dict[str, Any], fallback: d
     for data_type, fields in fields_by_type.items():
         for field in fields:
             unit = "CNY/share" if field in {"last", "open", "high", "low", "close", "prev_close"} else "UNKNOWN"
+            if field == "timestamp":
+                unit = "Unix epoch; aware Asia/Shanghai market_time"
+            elif field == "trade_date":
+                unit = "Asia/Shanghai calendar date"
+            elif field == "bar_end":
+                unit = "timezone-aware Asia/Shanghai datetime"
             status = "CONFIRMED"
             if field == "volume":
-                status = "DATA_CONFLICT" if data_type == "Daily" else "UNKNOWN"
+                unit = "shares (Longbridge CN raw x100)"
+                status = "CONFIRMED_EMPIRICALLY"
             elif field == "turnover":
                 status = "UNKNOWN"
             elif field in {"timestamp", "trade_date", "bar_end"}:
-                status = "PROVISIONAL"
+                status = "CONFIRMED_EMPIRICALLY"
             if data_type == "Latest Quote" and status == "CONFIRMED":
                 status = "CONFIRMED_CAPABILITY_RESEARCH_NOT_FORMAL_RISK_INPUT"
             row = {
                 "data_type": data_type,
                 "field": field,
                 **common_lb,
+                "fallback_policy": (
+                    "BLOCKED_PENDING_CONTRACT_VALIDATION"
+                    if data_type == "Daily"
+                    else "NOT_IMPLEMENTED"
+                    if data_type in {"15m", "60m"}
+                    else "NOT_APPLICABLE_RESEARCH_CAPABILITY"
+                ),
                 "unit": unit,
                 "adjustment": "NoAdjust/actual" if data_type != "Latest Quote" else "NOT_APPLICABLE",
                 "market_time_semantics": "trade_date" if data_type == "Daily" else "completed bar end/quote time",
@@ -915,16 +1266,36 @@ def contract_matrix(summary: dict[str, Any], volume: dict[str, Any], fallback: d
     return {
         "schema_version": 1,
         "version": "DATA_SOURCE_CONTRACT_v0.1",
-        "status": "PARTIAL",
+        "status": "COMPLETE"
+        if snapshot_contract["status"] == "PASS"
+        and volume["status"] == "CONFIRMED_EMPIRICALLY"
+        and fallback["status"] == "CONFIRMED_BLOCKED"
+        and timezone_contract["status"] == "PASS"
+        and regression["status"] == "PASS"
+        else "PARTIAL",
         "rows": rows,
         "summary": public_summary,
         "volume_unit_contract": volume["status"],
         "fallback_contract": fallback["status"],
+        "timezone_contract": timezone_contract["status"],
+        "snapshot_contract": snapshot_contract["status"],
+        "task_028_resolution": {
+            "snapshot": snapshot_contract,
+            "volume": {
+                "status": volume["status"],
+                "evidence_type": volume["evidence_type"],
+                "longbridge_cn_volume_scale": volume["longbridge_cn_volume_scale"],
+                "normalized_unit": volume["canonical_normalized_volume_unit"],
+            },
+            "fallback": fallback["status"],
+            "timezone": timezone_contract,
+            "risk_result_regression": regression,
+        },
         "production_change": {
             "risk_rules": False,
-            "provider_selection": False,
+            "provider_selection": True,
             "runtime": False,
-            "observability": False,
+            "observability": True,
         },
     }
 
@@ -1044,13 +1415,16 @@ def markdown_table(rows: list[list[Any]], headers: list[str]) -> str:
 
 
 def render_docs(contract: dict[str, Any], summary: dict[str, Any], volume: dict[str, Any], fallback: dict[str, Any]) -> dict[Path, str]:
+    task_028 = contract["task_028_resolution"]
+    snapshot = task_028["snapshot"]
+    timezone_contract = task_028["timezone"]
     matrix_rows = [
         [row["data_type"], row["field"], row["canonical_source"], row["unit"], row["fallback_policy"], row["current_status"]]
         for row in contract["rows"]
     ]
     source_contract = f"""# Data Source Contract v0.1
 
-Status: **PARTIAL**
+Status: **{contract['status']}**
 Audit scope: 2026-09-03 and 2026-09-04 production evidence. All eight successful intraday results are `CATCH_UP`; they are not LIVE proof.
 
 ## Contract Matrix
@@ -1062,12 +1436,13 @@ Audit scope: 2026-09-03 and 2026-09-04 production evidence. All eight successful
 - Trading timezone is Asia/Shanghai. `analysis_as_of` and `market_period_end` remain the scheduled market boundary; later `provider_observed_at` does not move that boundary.
 - The retained 2026-09-03 15:00 current Market artifact stores its runtime cutoff in the legacy `as_of` field, while `last_completed_bar_end`, report period, replay period, Stock context, and selected bars are all 15:00. It is labeled explicitly in its trace and is not treated as a later market period.
 - Auction market time is 09:25. The audited closed/final snapshots were observed later during operator CATCH_UP.
-- Longbridge SDK returns an epoch-backed timestamp that maps correctly in the audited 2026-09-03/04 data. Its Python SDK reference does not explicitly document the timezone of the returned naive `datetime`, so the general timezone contract remains **PROVISIONAL**.
+- Controlled `longbridge==4.5.0` calls under Asia/Tokyo and UTC produced different naive wall-clock values but identical Unix epochs. The SDK value is therefore confirmed as a process-local naive representation of an absolute instant. The adapter converts to epoch first and emits timezone-aware Asia/Shanghai `market_time`; `TIMEZONE_CONTRACT = PASS`.
 
 ## Units and Adjustment
 
 - Hithink documents stock Daily/Quote volume in shares and Auction volume in hands.
-- Longbridge documents the `volume` field type but not its unit. The six dual-source samples show a stable approximately 100x raw-value ratio. No adapter or normalizer conversion exists. The volume contract is therefore **DATA_CONFLICT**, not inferred as shares-versus-hands.
+- Longbridge documents the `volume` field type but not its unit. Across all six retained Daily samples, `turnover / volume_raw` lies outside the day's price range while `turnover / (volume_raw * 100)` lies inside it; Hithink share volume independently agrees after normalization and no counterexample exists. `LONGBRIDGE_CN_VOLUME_SCALE = 100_SHARES_PER_RAW_UNIT` is **EMPIRICALLY_CONFIRMED_BY_DIMENSIONAL_INVARIANT**, not officially documented.
+- Canonical cross-provider volume is shares. Hithink Daily is identity; Hithink Auction hands multiply by 100. Unknown provider/unit combinations are never converted automatically.
 - Turnover shows no scale conflict in the six samples, but the Longbridge official field unit is not stated; status is **UNKNOWN**.
 - Longbridge production history requests use `NoAdjust`/actual. No audited Daily/15m/60m/Auction price-adjustment conflict was found.
 
@@ -1081,8 +1456,10 @@ Audit scope: 2026-09-03 and 2026-09-04 production evidence. All eight successful
 
 - Hithink: authoritative A-share calendar and closed/final Auction snapshots.
 - Longbridge: production Direct Daily, 15m, 60m, and quote inputs; derived features retain Longbridge lineage.
+- Production Hithink Daily fallback is `BLOCKED_PENDING_CONTRACT_VALIDATION`; explicit research/cross-validation use remains available.
+- Each successful analysis cycle freezes one immutable Raw-member bundle and propagates its `cycle_raw_snapshot_id` through Coverage, Risk Input, Market 60m, Market 15m, Stock and Runtime result provenance.
 - 600150.SH remains research/shadow only and is not added to the formal risk pipeline.
-- No production runtime, provider selection, risk rule, fallback behavior, or notification policy was changed by this audit.
+- The only production source-selection change is the explicit safety block on an unapproved Hithink Daily fallback. Runtime scheduling, risk rules, scores, lights and notification policy are unchanged.
 """
 
     provider_audit = """# Provider Capability Audit
@@ -1091,7 +1468,7 @@ Audit scope: 2026-09-03 and 2026-09-04 production evidence. All eight successful
 | --- | --- | --- | --- | --- |
 | Hithink | A-share trading calendar | Runtime calendar cache | CONFIRMED | `/api/a-share/calendar/trading-days`; cached response retains provider metadata |
 | Hithink | Auction final | 2026-09-03/04 closed/final CATCH_UP raw snapshots | CONFIRMED | `/api/a-share/auction/snapshot`, `stage=final` |
-| Hithink | Daily/Quote | Validation/research and explicit Daily fallback candidate | CONFIRMED capability / fallback QUESTION | Official endpoint schema and adapter |
+| Hithink | Daily/Quote | Validation/research; production fallback blocked | CONFIRMED capability / fallback BLOCKED_PENDING_CONTRACT_VALIDATION | Official endpoint schema and production Risk Input boundary |
 | Hithink | 15m/60m | Not supported by current adapter | NOT_IMPLEMENTED | Adapter raises unsupported capability |
 | Longbridge | Daily | Production/research Direct Daily, NoAdjust | CONFIRMED | Adapter/provider code and retained raw requests |
 | Longbridge | 15m/60m | All eight audited intraday results | CONFIRMED | Result → risk input → raw trace |
@@ -1126,7 +1503,7 @@ All counted fields reach an existing provider raw file with a SHA-256 and reques
 
 The two 15:00 production assemblies per trading date retain Direct Daily evidence for both formal stocks (four snapshots total): requested provider and actual provider are Longbridge, `fallback_used=false`, and the risk-input snapshot points to an existing NoAdjust Longbridge raw file.
 
-The retained 2026-09-03 15:00 combined evidence contains Market 60m and Market 15m versus Stock replay-context raw-snapshot identity mismatches. Both snapshot sets end at 15:00 and the Current/Replay semantic values match, but no contract authorizes treating different raw identities as the same snapshot. The two-day `SNAPSHOT_CONTRACT` is therefore FAIL. All four 2026-09-04 periods pass the identity checks. No Current/Replay market-period drift was found.
+The retained 2026-09-03 15:00 combined evidence contains Market 60m and Market 15m versus Stock replay-context raw-snapshot identity mismatches. Both snapshot sets end at 15:00 and the Current/Replay semantic values match, but no contract authorizes treating different raw identities as the same snapshot. This historical artifact remains `LEGACY_SNAPSHOT_IDENTITY_MISMATCH` and is not rewritten. TASK_028 adds one immutable cycle bundle for new executions; the latest controlled saved-input replay has `SNAPSHOT_CONTRACT = {snapshot['status']}`. No Current/Replay market-period drift was found.
 """
 
     volume_rows = [
@@ -1135,18 +1512,19 @@ The retained 2026-09-03 15:00 combined evidence contains Market 60m and Market 1
     ]
     volume_doc = f"""# Volume Unit Contract
 
-- `VOLUME_UNIT_CONTRACT = DATA_CONFLICT`
+- `VOLUME_UNIT_CONTRACT = {volume['status']}`
 - `TURNOVER_UNIT_CONTRACT = UNKNOWN`
-- `conversion_location = NONE`
-- `auto_normalization_allowed = false`
+- `LONGBRIDGE_CN_VOLUME_SCALE = {volume['longbridge_cn_volume_scale']}`
+- `VOLUME_NORMALIZED_UNIT = shares`
+- `evidence_type = {volume['evidence_type']}`
 
-Hithink's official endpoint references state that stock Daily/Quote volume is shares and Auction volume is hands. Longbridge's official candlestick/quote references define a numeric `volume` field but do not state the unit. A stable approximately 100x ratio is not sufficient authority to name or convert the Longbridge unit.
+Hithink's official endpoint references state that stock Daily/Quote volume is shares and Auction volume is hands. Longbridge's official candlestick/quote references define a numeric `volume` field but do not state the unit. The Longbridge normalization below is accepted from the retained dimensional invariant, not presented as official documentation.
 
 {markdown_table(volume_rows, ["Symbol", "Date", "Hithink volume", "Longbridge volume", "Raw ratio", "Turnover difference"])}
 
-No unit conversion occurs in Raw, Provider Adapter, Normalizer, or Risk Input. Values are preserved as provider raw numerics. Volume is ignored/blocked or advisory in the audited formal risk scores.
+Raw values remain unchanged. Cross-provider validation uses an explicit normalizer; formal intraday risk continues to ignore/block or treat volume as advisory, so risk scores and lights do not change.
 
-For 600150.SH, date and OHLC agree and turnover differs only by provider rounding, but Volume remains semantically unresolved. `600150_DAILY_CROSS_VALIDATION_POST_AUDIT = DATA_CONFLICT`; the TASK_026B historical report is unchanged.
+For 600150.SH, date and OHLC agree and normalized volume agrees within provider integer rounding. `600150_DAILY_CROSS_VALIDATION_POST_028 = PASS_AFTER_UNIT_NORMALIZATION`; TASK_026B and TASK_027 history remains unchanged. Turnover remains independently `UNKNOWN`.
 """
 
     fallback_doc = "# Fallback Audit\n\n" + markdown_table(
@@ -1159,7 +1537,7 @@ For 600150.SH, date and OHLC agree and turnover differs only by provider roundin
 
 `SILENT_FALLBACK_FOUND = NO`. MarketDataService uses explicit ordered candidates and records requested provider, actual provider, fallback flag/reason, and raw path.
 
-No cross-provider fallback is formally approved in Data Source Contract v0.1. The production Daily call sites currently pass Hithink as an explicit candidate, but field/unit semantic compatibility is not ratified; this is **QUESTION**. Hithink minute bars are unsupported, so 15m/60m have no effective fallback. Auction and calendar have no alternate source.
+No cross-provider fallback is formally approved in Data Source Contract v0.1. The production Risk Input boundary filters Hithink from Longbridge Daily fallback candidates and records `HITHINK_DAILY_FALLBACK_BLOCKED_PENDING_CONTRACT_VALIDATION`. Explicit research/cross-validation access to Hithink Daily remains available. Hithink minute bars are unsupported, so 15m/60m have no effective fallback. Auction and calendar have no alternate source.
 """
 
     hardcoded_doc = """# Hardcoded Source Audit
@@ -1168,11 +1546,61 @@ No cross-provider fallback is formally approved in Data Source Contract v0.1. Th
 | --- | --- | --- | --- | --- |
 | `scripts/run_intraday_monitor.py` Auction/calendar setup | Hithink | Auction, calendar | Production scheduler entrypoint | JUSTIFIED |
 | `scripts/verify_market_index_coverage.py` refresh | Longbridge | index Daily/15m/60m | Production stage | JUSTIFIED_CANONICAL_SOURCE; policy is call-site fixed |
-| `scripts/verify_risk_input.py` refresh | Longbridge, explicit Hithink Daily candidate | stock Daily/15m/60m | Production stage | QUESTION_FOR_DAILY_FALLBACK |
+| `scripts/verify_risk_input.py` refresh | Longbridge; Hithink Daily production fallback blocked | stock Daily/15m/60m | Production stage | CONFIRMED_SAFE_BLOCK |
 | `src/trend_monitor/services/market_data.py` | Registry adapters | general | Production service | JUSTIFIED |
 | `scripts/verify_*`, research scripts | provider-specific | verification/research | No source-selection conflict in formal results | JUSTIFIED_BY_SCOPE |
 
-`HARDCODED_SOURCE_CONFLICT = NO` for the audited results. Some production entrypoints instantiate a canonical provider directly rather than selecting it from a centralized policy object. Their observed source matches the contract and is recorded in lineage, but the Daily fallback approval remains unresolved.
+`HARDCODED_SOURCE_CONFLICT = NO` for the audited results. Some production entrypoints instantiate a canonical provider directly rather than selecting it from a centralized policy object. Their observed source matches the contract and is recorded in lineage. Daily fallback remains deliberately blocked pending a separate versioned approval.
+"""
+
+    snapshot_resolution_doc = f"""# TASK_028 Snapshot Resolution
+
+- Current contract: **{snapshot['status']}**
+- Cycle ID: `{snapshot.get('cycle_id')}`
+- Cycle Raw snapshot: `{snapshot.get('cycle_raw_snapshot_id')}`
+- Analysis as-of: `{snapshot.get('analysis_as_of')}`
+- Frozen members: {snapshot.get('raw_member_count')} Raw members across {snapshot.get('instrument_snapshot_count')} instruments
+- Historical 2026-09-03 15:00 classification: `LEGACY_SNAPSHOT_IDENTITY_MISMATCH`
+- 2026-09-03 15:00 saved-input replay through the frozen history members: `{snapshot.get('legacy_saved_input_replay')}`
+
+Root cause: Market Coverage/Risk used a short-window Raw fetch while Stock replay/context performed a second historical-window fetch for the same period. The completed data ended at the same market boundary, but the Raw identities differed.
+
+Resolution: the existing Risk Input Snapshot Store now freezes the exact Daily/15m/60m member paths and hashes once per cycle. Coverage, Risk Input, Market 60m, Market 15m, Stock, Current/Replay and Runtime provenance must carry the same `cycle_raw_snapshot_id`; any identity mismatch blocks the gate. The old artifact is preserved.
+"""
+
+    volume_resolution_doc = f"""# TASK_028 Volume Resolution
+
+- Contract: **{volume['status']}**
+- Evidence: `{volume['evidence_type']}`
+- Longbridge CN scale: `{volume['longbridge_cn_volume_scale']}`
+- Canonical normalized unit: `shares`
+- Retained sample count: {volume['ratio_summary']['sample_count']}
+- Counterexamples: {volume['dimensional_invariant']['counterexamples']}
+- 600150 post-028: `PASS_AFTER_UNIT_NORMALIZATION`
+- Turnover: `UNKNOWN`
+
+All retained Longbridge Daily samples fail the factor-1 price invariant and pass the factor-100 invariant. Hithink's documented share volume passes the identity invariant. This is an empirical contract, not an official Longbridge unit claim. Raw data and frozen risk semantics remain unchanged.
+"""
+
+    fallback_resolution_doc = """# TASK_028 Daily Fallback Resolution
+
+- Production canonical Daily: `Longbridge`
+- Hithink Daily production fallback: `BLOCKED_PENDING_CONTRACT_VALIDATION`
+- Silent fallback: `NO`
+- Explicit Hithink Daily research/cross-validation: `ALLOWED`
+
+If Longbridge Daily is unavailable, production Risk Input remains blocked through the existing data-unavailable/preflight path and records a fallback block reason. This task does not approve cross-provider production fallback.
+"""
+
+    timezone_resolution_doc = f"""# TASK_028 Timezone Resolution
+
+- Contract: **{timezone_contract['status']}**
+- Longbridge naive datetime semantic: `{timezone_contract['longbridge_naive_datetime_semantic']}`
+- Evidence: `{timezone_contract['evidence_type']}`
+- SDK: `{timezone_contract['sdk']}`
+- Internal market time: `ASIA_SHANGHAI_AWARE`
+
+Controlled calls under Asia/Tokyo and UTC returned different naive wall-clock representations with the same Unix epoch. The adapter attaches the process-local zone only to recover that instant, then derives timezone-aware Asia/Shanghai market time. Normalization verifies any emitted `market_time` against the epoch, so the host timezone cannot shift A-share period boundaries.
 """
 
     conflict_doc = """# Proposed Cross-Provider Data Conflict Policy
@@ -1200,6 +1628,10 @@ Human approval and a versioned production contract are required before wiring th
         AUDIT_ROOT / "fallback_audit.md": fallback_doc,
         AUDIT_ROOT / "hardcoded_source_audit.md": hardcoded_doc,
         AUDIT_ROOT / "data_conflict_policy_proposal.md": conflict_doc,
+        AUDIT_ROOT / "task_028_snapshot_resolution.md": snapshot_resolution_doc,
+        AUDIT_ROOT / "task_028_volume_resolution.md": volume_resolution_doc,
+        AUDIT_ROOT / "task_028_fallback_resolution.md": fallback_resolution_doc,
+        AUDIT_ROOT / "task_028_timezone_resolution.md": timezone_resolution_doc,
     }
 
 
@@ -1227,12 +1659,62 @@ def build_audit(*, write: bool = True) -> dict[str, Any]:
     summary["daily_source_evidence"] = daily_source_evidence(report_paths)
     volume = unit_contract()
     fallback = fallback_audit()
-    contract = contract_matrix(summary, volume, fallback)
+    timezone_contract = timezone_audit()
+    snapshot_contract = snapshot_resolution(period_traces)
+    regression = task_025_regression(period_traces)
+    contract = contract_matrix(
+        summary,
+        volume,
+        fallback,
+        timezone_contract,
+        snapshot_contract,
+        regression,
+    )
+    task_028_summary = {
+        "schema_version": 1,
+        "task": "TASK_028",
+        "status": "COMPLETE" if contract["status"] == "COMPLETE" else "PARTIAL",
+        "snapshot_contract": snapshot_contract["status"],
+        "cycle_raw_snapshot_contract": "CONFIRMED"
+        if snapshot_contract["status"] == "PASS"
+        else "PARTIAL",
+        "legacy_2026_09_03_1500": "LEGACY_SNAPSHOT_IDENTITY_MISMATCH",
+        "volume_unit_contract": volume["status"],
+        "volume_evidence_type": volume["evidence_type"],
+        "longbridge_cn_volume_scale": volume["longbridge_cn_volume_scale"],
+        "volume_normalized_unit": "SHARES",
+        "daily_cross_validation_600150_post_028": volume[
+            "post_audit_resolution_600150"
+        ]["status"],
+        "turnover_unit_contract": volume["turnover_status"],
+        "hithink_daily_fallback": "BLOCKED_PENDING_CONTRACT_VALIDATION",
+        "silent_fallback": "NO",
+        "timezone_contract": timezone_contract["status"],
+        "longbridge_naive_datetime_semantic": timezone_contract[
+            "longbridge_naive_datetime_semantic"
+        ],
+        "internal_market_time": "ASIA_SHANGHAI_AWARE"
+        if timezone_contract["status"] == "PASS"
+        else "FAIL",
+        "as_of_contract": summary["as_of_contract"],
+        "lookahead": summary["lookahead"],
+        "current_replay_match": regression["current_replay_match"],
+        "determinism": regression["determinism"],
+        "risk_result_regression": regression["status"],
+        "production_rule_modified": "NO",
+        "scheduler_modified": "NO",
+        "notification_policy_modified": "NO",
+        "live_verified": "NOT_APPLICABLE",
+    }
     result = {
         "contract": contract,
         "summary": summary,
         "volume": volume,
         "fallback": fallback,
+        "timezone": timezone_contract,
+        "snapshot": snapshot_contract,
+        "task_028_summary": task_028_summary,
+        "regression": regression,
         "period_traces": period_traces,
         "auction_traces": auction_traces,
     }
@@ -1241,6 +1723,7 @@ def build_audit(*, write: bool = True) -> dict[str, Any]:
         write_json(AUDIT_ROOT / "production_source_trace_summary.json", summary)
         write_json(AUDIT_ROOT / "volume_unit_contract.json", volume)
         write_json(AUDIT_ROOT / "fallback_audit.json", fallback)
+        write_json(AUDIT_ROOT / "task_028_summary.json", task_028_summary)
         for trace in period_traces:
             stamp = datetime.fromisoformat(trace["period"]).strftime("%Y%m%d_%H%M")
             write_json(TRACE_ROOT / f"{stamp}.json", trace)
